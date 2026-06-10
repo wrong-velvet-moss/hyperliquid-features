@@ -1,0 +1,169 @@
+{
+  "uid": "hl-order-flow",
+  "title": "Hyperliquid — Order Flow & Forced Exits",
+  "tags": ["hyperliquid", "flow"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "coin",
+        "label": "Coin",
+        "type": "query",
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+        "query": "SELECT DISTINCT coin FROM trades ORDER BY 1",
+        "definition": "SELECT DISTINCT coin FROM trades ORDER BY 1",
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": null,
+        "current": { "text": "All", "value": "$__all" }
+      },
+      {
+        "name": "min_notional",
+        "label": "Min trade notional (USD)",
+        "type": "custom",
+        "query": "0,10000,25000,50000,100000,250000,1000000",
+        "multi": false,
+        "includeAll": false,
+        "current": { "text": "50000", "value": "50000" },
+        "options": [
+          { "text": "0", "value": "0", "selected": false },
+          { "text": "10000", "value": "10000", "selected": false },
+          { "text": "25000", "value": "25000", "selected": false },
+          { "text": "50000", "value": "50000", "selected": true },
+          { "text": "100000", "value": "100000", "selected": false },
+          { "text": "250000", "value": "250000", "selected": false },
+          { "text": "1000000", "value": "1000000", "selected": false }
+        ]
+      }
+    ]
+  },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "**Everyone's executed orders** (public trade tape) above the `$min_notional` USD threshold, plus a **forced-exit proxy** (open-interest contractions that look like liquidation cascades). _Real stop-loss / take-profit orders are private and can't be shown; the forced-exit proxy is the closest signal of where stops actually fired._"
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Whale tape — large executed trades",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 2 },
+      "options": { "showHeader": true, "cellHeight": "sm", "sortBy": [ { "displayName": "time", "desc": true } ] },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "filterable": true } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "px" }, "properties": [ { "id": "unit", "value": "currencyUSD" } ] },
+          { "matcher": { "id": "byName", "options": "notional_usd" }, "properties": [ { "id": "unit", "value": "currencyUSD" }, { "id": "custom.cellOptions", "value": { "type": "color-text" } } ] },
+          { "matcher": { "id": "byName", "options": "side" }, "properties": [ { "id": "mappings", "value": [ { "type": "value", "options": { "BUY": { "color": "green", "index": 0 }, "SELL": { "color": "red", "index": 1 } } } ] }, { "id": "custom.cellOptions", "value": { "type": "color-text" } } ] }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT time AS \"time\",\n       coin,\n       CASE WHEN side='B' THEN 'BUY' ELSE 'SELL' END AS side,\n       px,\n       round(sz::numeric, 4) AS sz,\n       round((px*sz)::numeric, 0) AS notional_usd\nFROM trades\nWHERE $__timeFilter(time) AND coin IN (${coin:singlequote}) AND px*sz >= $min_notional\nORDER BY time DESC\nLIMIT 200"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Large-trade net notional (buys − sells, per bucket)",
+      "description": "Signed notional of trades above the threshold. Green = aggressive whale buying, red = selling.",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 2 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 70, "showPoints": "never", "axisLabel": "net notional", "gradientMode": "none" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('$__interval'::interval, time) AS \"time\",\n       coin AS metric,\n       sum(CASE WHEN side='B' THEN px*sz ELSE -px*sz END) AS net_notional\nFROM trades\nWHERE $__timeFilter(time) AND coin IN (${coin:singlequote}) AND px*sz >= $min_notional\nGROUP BY 1, coin\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Forced-exit proxy — signed liquidation pressure",
+      "description": "OI-contraction magnitude signed by price direction. Positive = short flush (OI down, price up), negative = long flush (OI down, price down). This is where stops/liquidations most likely fired.",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 70, "showPoints": "never", "axisLabel": "liq pressure" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "WITH b AS (\n  SELECT time_bucket('$__interval'::interval, time) AS bucket, coin,\n         last(open_interest, time) AS oi,\n         last(mark_px, time) AS mark\n  FROM assetctx\n  WHERE $__timeFilter(time) AND coin IN (${coin:singlequote})\n  GROUP BY 1, coin\n), d AS (\n  SELECT bucket, coin,\n         oi   - lag(oi)   OVER (PARTITION BY coin ORDER BY bucket) AS d_oi,\n         mark - lag(mark) OVER (PARTITION BY coin ORDER BY bucket) AS d_mark\n  FROM b\n)\nSELECT bucket AS \"time\",\n       coin AS metric,\n       CASE WHEN d_mark < 0 THEN -greatest(-d_oi, 0) ELSE greatest(-d_oi, 0) END AS liq_pressure\nFROM d\nWHERE d_oi IS NOT NULL\nORDER BY bucket"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Biggest forced-exit events (largest 1-min OI drops)",
+      "description": "Largest open-interest contractions paired with the bar's price move — candidate liquidation/stop cascades.",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 12 },
+      "options": { "showHeader": true, "cellHeight": "sm" },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "filterable": true } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "likely_side" }, "properties": [ { "id": "mappings", "value": [ { "type": "value", "options": { "long flush": { "color": "red", "index": 0 }, "short flush": { "color": "green", "index": 1 } } } ] }, { "id": "custom.cellOptions", "value": { "type": "color-text" } } ] }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH b AS (\n  SELECT time_bucket('1 minute', time) AS bucket, coin,\n         last(open_interest, time) AS oi,\n         last(mark_px, time) AS mark\n  FROM assetctx\n  WHERE $__timeFilter(time) AND coin IN (${coin:singlequote})\n  GROUP BY 1, coin\n), d AS (\n  SELECT bucket, coin,\n         oi - lag(oi) OVER (PARTITION BY coin ORDER BY bucket) AS d_oi,\n         (mark / nullif(lag(mark) OVER (PARTITION BY coin ORDER BY bucket), 0) - 1) * 10000 AS ret_bps\n  FROM b\n)\nSELECT bucket AS \"time\",\n       coin,\n       round(d_oi::numeric, 2) AS oi_change,\n       round(ret_bps::numeric, 1) AS price_move_bps,\n       CASE WHEN ret_bps < 0 THEN 'long flush' ELSE 'short flush' END AS likely_side\nFROM d\nWHERE d_oi < 0\nORDER BY d_oi ASC\nLIMIT 20"
+        }
+      ]
+    }
+  ]
+}
