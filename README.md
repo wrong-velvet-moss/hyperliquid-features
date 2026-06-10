@@ -35,7 +35,31 @@ scripts/
   spike_fairvalue.py     # run the predictiveness test -> reports/fairvalue_spike.md
   collect_live.py        # run the live collector (free liquidation-proxy path)
   spike_liquidations.py  # IC harness on the collected OI-based liquidation proxy
+db/init/          # TimescaleDB schema (auto-applied on first container start)
+grafana/          # provisioned datasource + dashboards (auto-loaded by Grafana)
+docker-compose.yml # Grafana + TimescaleDB monitoring stack
+Makefile          # common tasks: `make help`
 ```
+
+## Live monitoring stack (Grafana + TimescaleDB)
+
+Collected market data is surfaced in Grafana, backed by a TimescaleDB
+(Postgres) hypertable store. Everything is provisioned from this repo — bring it
+up with one command (requires Docker + Docker Compose):
+
+```bash
+make up        # start Grafana + TimescaleDB (creates .env from .env.example)
+make ps        # check status
+make logs      # tail logs
+make down      # stop (volumes persist)
+```
+
+- **Grafana** → http://localhost:3000 (default `admin` / `admin`, change in `.env`)
+- **TimescaleDB** → `localhost:5432`, db `hlsignals` (open a shell with `make psql`)
+
+On first start the DB schema (`db/init/`) creates `assetctx` and `trades`
+hypertables, and Grafana auto-provisions the TimescaleDB datasource. Override
+ports/credentials by copying `.env.example` → `.env`.
 
 ## Quickstart
 
