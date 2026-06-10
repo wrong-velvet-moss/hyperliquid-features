@@ -4,6 +4,7 @@ Caveat baked into the reporting: sampling an h-hour forward return every hour
 creates overlapping windows, so naive p-values overstate significance. We report
 both the full (overlapping) IC and a de-overlapped IC sampled every h hours.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -11,7 +12,9 @@ import pandas as pd
 from scipy import stats
 
 
-def information_coefficient(df: pd.DataFrame, signal: str, ret_col: str, method: str = "spearman"):
+def information_coefficient(
+    df: pd.DataFrame, signal: str, ret_col: str, method: str = "spearman"
+):
     d = df[[signal, ret_col]].replace([np.inf, -np.inf], np.nan).dropna()
     if len(d) < 30:
         return {"ic": np.nan, "p": np.nan, "n": len(d)}
@@ -20,7 +23,9 @@ def information_coefficient(df: pd.DataFrame, signal: str, ret_col: str, method:
     return {"ic": float(rho), "p": float(p), "n": int(len(d))}
 
 
-def deoverlapped_ic(df: pd.DataFrame, signal: str, ret_col: str, horizon: int, method: str = "spearman"):
+def deoverlapped_ic(
+    df: pd.DataFrame, signal: str, ret_col: str, horizon: int, method: str = "spearman"
+):
     """IC on non-overlapping samples (every `horizon` rows within each coin)."""
     keep = []
     for _, g in df.sort_values(["coin", "ts"]).groupby("coin"):
@@ -29,17 +34,23 @@ def deoverlapped_ic(df: pd.DataFrame, signal: str, ret_col: str, horizon: int, m
     return information_coefficient(sampled, signal, ret_col, method)
 
 
-def quantile_table(df: pd.DataFrame, signal: str, ret_col: str, q: int = 5) -> pd.DataFrame:
+def quantile_table(
+    df: pd.DataFrame, signal: str, ret_col: str, q: int = 5
+) -> pd.DataFrame:
     d = df[[signal, ret_col]].replace([np.inf, -np.inf], np.nan).dropna().copy()
     if len(d) < q * 10:
         return pd.DataFrame()
     d["bucket"] = pd.qcut(d[signal].rank(method="first"), q, labels=False)
-    g = d.groupby("bucket")[ret_col].agg(mean_ret="mean", median_ret="median", n="count")
+    g = d.groupby("bucket")[ret_col].agg(
+        mean_ret="mean", median_ret="median", n="count"
+    )
     g["mean_ret_bps"] = g["mean_ret"] * 1e4
     return g
 
 
-def ic_grid(df: pd.DataFrame, signals: list[str], horizons: list[int], method: str = "spearman") -> pd.DataFrame:
+def ic_grid(
+    df: pd.DataFrame, signals: list[str], horizons: list[int], method: str = "spearman"
+) -> pd.DataFrame:
     """Pooled IC for every signal x horizon, plus the de-overlapped IC."""
     out = []
     for sig in signals:
@@ -62,7 +73,9 @@ def ic_grid(df: pd.DataFrame, signals: list[str], horizons: list[int], method: s
     return pd.DataFrame(out)
 
 
-def per_coin_ic(df: pd.DataFrame, signal: str, horizon: int, method: str = "spearman") -> pd.DataFrame:
+def per_coin_ic(
+    df: pd.DataFrame, signal: str, horizon: int, method: str = "spearman"
+) -> pd.DataFrame:
     ret = f"fwd_ret_{horizon}h"
     rows = []
     for coin, g in df.groupby("coin"):

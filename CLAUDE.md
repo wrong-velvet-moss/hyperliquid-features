@@ -6,8 +6,8 @@ ALWAYS use subagents where possible, parralell work is better.
 
 ## Tools
 
-ALWAYS use `uv` in python. `uv add` for installs, NEVER `pip install` directly.  
-`uv run example.py` for running, NEVER `python example.py` or `python3 example.py` directly.  
+ALWAYS use `uv` in python. `uv add` for installs, NEVER `pip install` directly.
+`uv run example.py` for running, NEVER `python example.py` or `python3 example.py` directly.
 Avoid editing the `pyproject.toml` directly, where possible use `uv add`, `uv remove` etc.
 
 Use `ruff` for formatting python files, run via `uv run ruff`. Run `ruff check` on any new files before running them or including them. Fix any warnings or errors before proceeding.

@@ -1,5 +1,6 @@
 """Turn collected live trades + asset-context part-files into a bar panel with an
 open-interest liquidation proxy, ready for the same predictive harness."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,7 +23,9 @@ def load_live(outdir: str | Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     return _load("trades"), _load("assetctx")
 
 
-def resample_panel(trades: pd.DataFrame, ctx: pd.DataFrame, freq: str = "5min") -> pd.DataFrame:
+def resample_panel(
+    trades: pd.DataFrame, ctx: pd.DataFrame, freq: str = "5min"
+) -> pd.DataFrame:
     """Per-coin OHLC + flow + OI bars at `freq`."""
     bars = []
     for coin, g in ctx.groupby("coin"):
@@ -41,7 +44,9 @@ def resample_panel(trades: pd.DataFrame, ctx: pd.DataFrame, freq: str = "5min") 
 
     if not trades.empty:
         t = trades.copy()
-        t["signed"] = np.where(t["side"] == "B", t["sz"], -t["sz"])  # taker-buy positive
+        t["signed"] = np.where(
+            t["side"] == "B", t["sz"], -t["sz"]
+        )  # taker-buy positive
         agg = (
             t.set_index("ts")
             .groupby("coin")[["signed", "sz"]]  # select cols -> excludes the group key

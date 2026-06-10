@@ -6,6 +6,7 @@ a `type` field. Docs: https://hyperliquid.gitbook.io/hyperliquid-docs/for-develo
 Rate limits (IP-based): 1200 weight/min aggregate. The light endpoints we use
 cost 2-20 weight each, so a small client-side throttle keeps us well under.
 """
+
 from __future__ import annotations
 
 import time
@@ -42,14 +43,16 @@ class HyperliquidInfo:
                 r = self._session.post(self.url, json=payload, timeout=self.timeout)
                 self._last = time.time()
                 if r.status_code == 429:  # rate limited -> exponential backoff
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
                     continue
                 r.raise_for_status()
                 return r.json()
             except requests.RequestException as exc:
                 last_exc = exc
                 time.sleep(1.5 * (attempt + 1))
-        raise RuntimeError(f"Hyperliquid request failed after {self.max_retries} tries: {last_exc}")
+        raise RuntimeError(
+            f"Hyperliquid request failed after {self.max_retries} tries: {last_exc}"
+        )
 
     # --- endpoints -----------------------------------------------------------
 
@@ -58,18 +61,31 @@ class HyperliquidInfo:
         live contexts (markPx, oraclePx, midPx, premium, funding, openInterest, dayNtlVlm)."""
         return self._post({"type": "metaAndAssetCtxs"})
 
-    def funding_history(self, coin: str, start_ms: int, end_ms: int | None = None) -> list[dict]:
+    def funding_history(
+        self, coin: str, start_ms: int, end_ms: int | None = None
+    ) -> list[dict]:
         """Hourly {coin, fundingRate, premium, time}. Paginated by time (~500/call)."""
-        payload: dict[str, Any] = {"type": "fundingHistory", "coin": coin, "startTime": int(start_ms)}
+        payload: dict[str, Any] = {
+            "type": "fundingHistory",
+            "coin": coin,
+            "startTime": int(start_ms),
+        }
         if end_ms is not None:
             payload["endTime"] = int(end_ms)
         return self._post(payload)
 
-    def candle_snapshot(self, coin: str, interval: str, start_ms: int, end_ms: int) -> list[dict]:
+    def candle_snapshot(
+        self, coin: str, interval: str, start_ms: int, end_ms: int
+    ) -> list[dict]:
         """OHLCV candles {t,T,s,i,o,c,h,l,v,n}. Max 5000 most-recent candles."""
         return self._post(
             {
                 "type": "candleSnapshot",
-                "req": {"coin": coin, "interval": interval, "startTime": int(start_ms), "endTime": int(end_ms)},
+                "req": {
+                    "coin": coin,
+                    "interval": interval,
+                    "startTime": int(start_ms),
+                    "endTime": int(end_ms),
+                },
             }
         )

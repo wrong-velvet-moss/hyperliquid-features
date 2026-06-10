@@ -10,6 +10,7 @@ contraction concurrent with a price move is the footprint of a liquidation
 cascade (see livepanel.add_liq_proxy). Data is flushed to rotating Parquet
 part-files so a crash/restart never loses more than `flush_secs` of data.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,7 +29,9 @@ def _f(v) -> float:
 
 
 class LiveCollector:
-    def __init__(self, coins: list[str], outdir: str | Path, flush_secs: int = 60) -> None:
+    def __init__(
+        self, coins: list[str], outdir: str | Path, flush_secs: int = 60
+    ) -> None:
         self.coins = coins
         self.outdir = Path(outdir)
         (self.outdir / "trades").mkdir(parents=True, exist_ok=True)
@@ -45,11 +48,17 @@ class LiveCollector:
         backoff = 1
         while deadline is None or time.time() < deadline:
             try:
-                async with websockets.connect(WS_URL, max_size=16_000_000, ping_interval=20) as ws:
+                async with websockets.connect(
+                    WS_URL, max_size=16_000_000, ping_interval=20
+                ) as ws:
                     await self._subscribe(ws)
                     backoff = 1
                     while deadline is None or time.time() < deadline:
-                        budget = 5.0 if deadline is None else max(0.5, min(5.0, deadline - time.time()))
+                        budget = (
+                            5.0
+                            if deadline is None
+                            else max(0.5, min(5.0, deadline - time.time()))
+                        )
                         try:
                             raw = await asyncio.wait_for(ws.recv(), timeout=budget)
                             self._handle(json.loads(raw))
@@ -64,8 +73,22 @@ class LiveCollector:
 
     async def _subscribe(self, ws) -> None:
         for c in self.coins:
-            await ws.send(json.dumps({"method": "subscribe", "subscription": {"type": "trades", "coin": c}}))
-            await ws.send(json.dumps({"method": "subscribe", "subscription": {"type": "activeAssetCtx", "coin": c}}))
+            await ws.send(
+                json.dumps(
+                    {
+                        "method": "subscribe",
+                        "subscription": {"type": "trades", "coin": c},
+                    }
+                )
+            )
+            await ws.send(
+                json.dumps(
+                    {
+                        "method": "subscribe",
+                        "subscription": {"type": "activeAssetCtx", "coin": c},
+                    }
+                )
+            )
 
     def _handle(self, m: dict) -> None:
         ch = m.get("channel")
@@ -90,7 +113,9 @@ class LiveCollector:
             x = d["ctx"]
             self._ctx.append(
                 {
-                    "ts": int(time.time() * 1000),  # ctx msg has no ts; stamp on receipt
+                    "ts": int(
+                        time.time() * 1000
+                    ),  # ctx msg has no ts; stamp on receipt
                     "coin": d["coin"],
                     "markPx": _f(x.get("markPx")),
                     "oraclePx": _f(x.get("oraclePx")),
@@ -110,10 +135,17 @@ class LiveCollector:
     def _flush(self, force: bool = False) -> None:
         stamp = int(time.time())
         if self._trades:
-            pd.DataFrame(self._trades).to_parquet(self.outdir / "trades" / f"{stamp}.parquet", index=False)
+            pd.DataFrame(self._trades).to_parquet(
+                self.outdir / "trades" / f"{stamp}.parquet", index=False
+            )
             self._trades = []
         if self._ctx:
-            pd.DataFrame(self._ctx).to_parquet(self.outdir / "assetctx" / f"{stamp}.parquet", index=False)
+            pd.DataFrame(self._ctx).to_parquet(
+                self.outdir / "assetctx" / f"{stamp}.parquet", index=False
+            )
             self._ctx = []
         self._last_flush = time.time()
-        print(f"[flush {stamp}] cumulative trades={self.n_trades} ctx={self.n_ctx}", flush=True)
+        print(
+            f"[flush {stamp}] cumulative trades={self.n_trades} ctx={self.n_ctx}",
+            flush=True,
+        )

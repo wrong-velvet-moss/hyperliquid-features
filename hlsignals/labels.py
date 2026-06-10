@@ -1,4 +1,5 @@
 """Forward-return labels and derived signals for the predictiveness test."""
+
 from __future__ import annotations
 
 import pandas as pd
@@ -6,7 +7,9 @@ import pandas as pd
 DEFAULT_HORIZONS = (1, 4, 8, 24)  # hours
 
 
-def add_forward_returns(panel: pd.DataFrame, horizons=DEFAULT_HORIZONS, price_col: str = "close") -> pd.DataFrame:
+def add_forward_returns(
+    panel: pd.DataFrame, horizons=DEFAULT_HORIZONS, price_col: str = "close"
+) -> pd.DataFrame:
     """fwd_ret_{h}h = close[t+h]/close[t] - 1, computed within each coin."""
     panel = panel.sort_values(["coin", "ts"]).copy()
     grp = panel.groupby("coin")[price_col]
