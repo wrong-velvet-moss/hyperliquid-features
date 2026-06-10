@@ -7,6 +7,7 @@ Signals captured per (coin, hour):
 
 Both are the publicly available expression of the "fair value deviation" idea.
 """
+
 from __future__ import annotations
 
 import pandas as pd
@@ -14,7 +15,9 @@ import pandas as pd
 from .api import HyperliquidInfo
 
 
-def fetch_funding(client: HyperliquidInfo, coin: str, start_ms: int, end_ms: int) -> pd.DataFrame:
+def fetch_funding(
+    client: HyperliquidInfo, coin: str, start_ms: int, end_ms: int
+) -> pd.DataFrame:
     out: list[dict] = []
     cur = start_ms
     while cur < end_ms:
@@ -35,7 +38,9 @@ def fetch_funding(client: HyperliquidInfo, coin: str, start_ms: int, end_ms: int
     df["premium"] = df["premium"].astype(float)
     # Funding timestamps carry a few-ms jitter past the hour (e.g. 02:00:00.006);
     # floor to the hour so they align exactly with candle open times on merge.
-    df["ts"] = pd.to_datetime(df["time"].astype("int64"), unit="ms", utc=True).dt.floor("h")
+    df["ts"] = pd.to_datetime(df["time"].astype("int64"), unit="ms", utc=True).dt.floor(
+        "h"
+    )
     df["coin"] = coin
     return (
         df[["ts", "coin", "fundingRate", "premium"]]
@@ -45,18 +50,34 @@ def fetch_funding(client: HyperliquidInfo, coin: str, start_ms: int, end_ms: int
     )
 
 
-def fetch_candles(client: HyperliquidInfo, coin: str, interval: str, start_ms: int, end_ms: int) -> pd.DataFrame:
+def fetch_candles(
+    client: HyperliquidInfo, coin: str, interval: str, start_ms: int, end_ms: int
+) -> pd.DataFrame:
     rows = client.candle_snapshot(coin, interval, start_ms, end_ms)
     if not rows:
-        return pd.DataFrame(columns=["ts", "coin", "open", "high", "low", "close", "vol", "trades"])
+        return pd.DataFrame(
+            columns=["ts", "coin", "open", "high", "low", "close", "vol", "trades"]
+        )
     df = pd.DataFrame(rows).rename(
-        columns={"t": "open_ms", "o": "open", "h": "high", "l": "low", "c": "close", "v": "vol", "n": "trades"}
+        columns={
+            "t": "open_ms",
+            "o": "open",
+            "h": "high",
+            "l": "low",
+            "c": "close",
+            "v": "vol",
+            "n": "trades",
+        }
     )
     for col in ["open", "high", "low", "close", "vol"]:
         df[col] = df[col].astype(float)
     df["ts"] = pd.to_datetime(df["open_ms"].astype("int64"), unit="ms", utc=True)
     df["coin"] = coin
-    return df[["ts", "coin", "open", "high", "low", "close", "vol", "trades"]].sort_values("ts").reset_index(drop=True)
+    return (
+        df[["ts", "coin", "open", "high", "low", "close", "vol", "trades"]]
+        .sort_values("ts")
+        .reset_index(drop=True)
+    )
 
 
 def build_panel(funding: pd.DataFrame, candles: pd.DataFrame) -> pd.DataFrame:

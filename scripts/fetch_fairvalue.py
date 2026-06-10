@@ -4,6 +4,7 @@
 Usage:
     python scripts/fetch_fairvalue.py --n 20 --days 120
 """
+
 from __future__ import annotations
 
 import argparse
@@ -37,7 +38,9 @@ def main() -> None:
     coins = ctx["coin"].head(args.n).tolist()
     print(f"Top {args.n} perps by 24h notional volume:")
     for _, r in ctx.head(args.n).iterrows():
-        print(f"  {r['coin']:<8} vol=${r['dayNtlVlm']/1e6:8.1f}M  OI=${r['openInterest']/1e6:7.1f}M")
+        print(
+            f"  {r['coin']:<8} vol=${r['dayNtlVlm'] / 1e6:8.1f}M  OI=${r['openInterest'] / 1e6:7.1f}M"
+        )
     DATA.mkdir(exist_ok=True)
     ctx.head(args.n).to_parquet(DATA / "universe.parquet", index=False)
 
@@ -48,7 +51,9 @@ def main() -> None:
             candles = fetch_candles(client, coin, args.interval, start_ms, end_ms)
             panel = build_panel(funding, candles)
             panels.append(panel)
-            print(f"[{i:>2}/{len(coins)}] {coin:<8} candles={len(candles):>4}  funding={len(funding):>4}")
+            print(
+                f"[{i:>2}/{len(coins)}] {coin:<8} candles={len(candles):>4}  funding={len(funding):>4}"
+            )
         except Exception as exc:  # keep going; one bad coin shouldn't sink the run
             print(f"[{i:>2}/{len(coins)}] {coin:<8} FAILED: {exc}")
 

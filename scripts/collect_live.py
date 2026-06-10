@@ -5,6 +5,7 @@ Examples:
     python scripts/collect_live.py --n 20            # run until killed (Ctrl-C)
     python scripts/collect_live.py --n 10 --minutes 90 --flush 30
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,8 +24,15 @@ OUTDIR = Path(__file__).resolve().parents[1] / "data" / "live"
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=20, help="top N perps by 24h volume")
-    ap.add_argument("--minutes", type=float, default=None, help="stop after N minutes (default: run forever)")
-    ap.add_argument("--flush", type=int, default=60, help="flush part-files every N seconds")
+    ap.add_argument(
+        "--minutes",
+        type=float,
+        default=None,
+        help="stop after N minutes (default: run forever)",
+    )
+    ap.add_argument(
+        "--flush", type=int, default=60, help="flush part-files every N seconds"
+    )
     args = ap.parse_args()
 
     coins = top_perps_by_volume(args.n)

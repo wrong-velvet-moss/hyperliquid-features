@@ -37,12 +37,15 @@ short-horizon reversals (exhaustion) or continuation (cascade)?
 Implement `hourly_liquidations_from_s3(coins, start, end) -> DataFrame[ts,coin,...]`
 then reuse labels.add_forward_returns + predictive.ic_grid unchanged.
 """
+
 from __future__ import annotations
 
 import pandas as pd
 
 
-def hourly_liquidations_from_s3(coins: list[str], start_ms: int, end_ms: int) -> pd.DataFrame:  # noqa: ARG001
+def hourly_liquidations_from_s3(
+    coins: list[str], start_ms: int, end_ms: int
+) -> pd.DataFrame:  # noqa: ARG001
     raise NotImplementedError(
         "Wire up s3://hl-mainnet-node-data/node_fills_by_block parsing (requester-pays). "
         "See module docstring for the plan."
