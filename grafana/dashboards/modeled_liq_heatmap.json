@@ -1,0 +1,99 @@
+{
+  "uid": "hl-modeled-liq",
+  "title": "Hyperliquid — Modeled Liquidation Heatmap (NOT real orders)",
+  "tags": ["hyperliquid", "modeled"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "coin",
+        "label": "Coin",
+        "type": "query",
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+        "query": "SELECT DISTINCT coin FROM assetctx ORDER BY 1",
+        "definition": "SELECT DISTINCT coin FROM assetctx ORDER BY 1",
+        "refresh": 2,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": { "text": "BTC", "value": "BTC" }
+      }
+    ]
+  },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "## ⚠️ MODELED — not real orders\nThis is an **estimate**, not data. Hyperliquid does **not** publish stop-loss / take-profit / liquidation levels. This heatmap projects where positions *would* be liquidated **if** the current open interest were spread across common leverage tiers (capped at `$coin`'s real max leverage), entered at the current mark. Bands sit at ±(10000 / leverage) bps from price. Treat it as a what-if, like every 'liq heatmap' on other sites — the real, non-modeled views are the **Order Book Depth** and **Order Flow** dashboards."
+      }
+    },
+    {
+      "id": 2,
+      "type": "heatmap",
+      "title": "Modeled liquidation clusters — est. notional at risk by bps from price",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 3 },
+      "options": {
+        "calculate": false,
+        "color": { "mode": "scheme", "scheme": "Inferno", "steps": 64, "reverse": false, "exponent": 0.5, "fill": "dark-red" },
+        "cellGap": 1,
+        "yAxis": { "axisPlacement": "left", "reverse": false, "unit": "none", "axisLabel": "bps from mark (− long liqs / + short liqs)" },
+        "rowsFrame": { "layout": "auto", "value": "est. notional at risk" },
+        "tooltip": { "show": true, "yHistogram": false },
+        "legend": { "show": true },
+        "filterValues": { "le": 1e-9 }
+      },
+      "fieldConfig": {
+        "defaults": { "custom": { "hideFrom": { "tooltip": false, "viz": false, "legend": false }, "scaleDistribution": { "type": "linear" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "WITH cap AS (\n  SELECT max_leverage FROM coin_meta WHERE coin='$coin'\n), levs AS (\n  SELECT lev FROM unnest(ARRAY[2,3,5,10,20,25,40,50,100]) AS lev, cap\n  WHERE lev <= cap.max_leverage\n), bars AS (\n  SELECT time_bucket('$__interval'::interval, time) AS bucket,\n         last(mark_px, time) AS mark,\n         last(open_interest, time) AS oi\n  FROM assetctx WHERE coin='$coin' AND $__timeFilter(time)\n  GROUP BY 1\n), pts AS (\n  SELECT b.bucket, b.mark, b.oi, b.mark*(1 - 1.0/l.lev) AS liq_px FROM bars b CROSS JOIN levs l\n  UNION ALL\n  SELECT b.bucket, b.mark, b.oi, b.mark*(1 + 1.0/l.lev) AS liq_px FROM bars b CROSS JOIN levs l\n)\nSELECT bucket AS \"time\",\n       (round(((liq_px/mark - 1)*10000)/50.0)*50)::int::text AS metric,\n       sum(oi) AS est_at_risk\nFROM pts\nWHERE abs((liq_px/mark - 1)*10000) <= 1200\nGROUP BY 1, 2\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Estimated liquidation levels at current price (per leverage tier)",
+      "description": "If a position were opened at the current mark, this is where it would be liquidated. MODELED — not real positions.",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 15 },
+      "options": { "showHeader": true, "cellHeight": "sm", "sortBy": [ { "displayName": "leverage_x", "desc": true } ] },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "filterable": true } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "long_liq_below" }, "properties": [ { "id": "unit", "value": "currencyUSD" }, { "id": "custom.cellOptions", "value": { "type": "color-text" } }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byName", "options": "short_liq_above" }, "properties": [ { "id": "unit", "value": "currencyUSD" }, { "id": "custom.cellOptions", "value": { "type": "color-text" } }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "pct_to_liq" }, "properties": [ { "id": "unit", "value": "percent" }, { "id": "decimals", "value": 2 } ] }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH cap AS (\n  SELECT max_leverage FROM coin_meta WHERE coin='$coin'\n), levs AS (\n  SELECT lev FROM unnest(ARRAY[2,3,5,10,20,25,40,50,100]) AS lev, cap\n  WHERE lev <= cap.max_leverage\n), latest AS (\n  SELECT last(mark_px, time) AS mark FROM assetctx WHERE coin='$coin' AND $__timeFilter(time)\n)\nSELECT l.lev AS leverage_x,\n       round((latest.mark*(1 - 1.0/l.lev))::numeric, 4) AS long_liq_below,\n       round((latest.mark*(1 + 1.0/l.lev))::numeric, 4) AS short_liq_above,\n       round((100.0/l.lev)::numeric, 2) AS pct_to_liq\nFROM levs l, latest\nORDER BY l.lev DESC"
+        }
+      ]
+    }
+  ]
+}
