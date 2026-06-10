@@ -30,18 +30,29 @@ def _f(v) -> float:
 
 class LiveCollector:
     def __init__(
-        self, coins: list[str], outdir: str | Path, flush_secs: int = 60
+        self,
+        coins: list[str],
+        outdir: str | Path,
+        flush_secs: int = 60,
+        book_secs: float = 5.0,
     ) -> None:
         self.coins = coins
         self.outdir = Path(outdir)
         (self.outdir / "trades").mkdir(parents=True, exist_ok=True)
         (self.outdir / "assetctx").mkdir(parents=True, exist_ok=True)
+        (self.outdir / "book").mkdir(parents=True, exist_ok=True)
         self.flush_secs = flush_secs
+        self.book_secs = (
+            book_secs  # min seconds between persisted book snapshots per coin
+        )
         self._trades: list[dict] = []
         self._ctx: list[dict] = []
+        self._book: list[dict] = []
+        self._book_last: dict[str, float] = {}  # coin -> last sampled ts (monotonic)
         self._last_flush = time.time()
         self.n_trades = 0
         self.n_ctx = 0
+        self.n_book = 0
 
     async def run(self, minutes: float | None = None) -> None:
         deadline = None if minutes is None else time.time() + minutes * 60
@@ -89,6 +100,14 @@ class LiveCollector:
                     }
                 )
             )
+            await ws.send(
+                json.dumps(
+                    {
+                        "method": "subscribe",
+                        "subscription": {"type": "l2Book", "coin": c},
+                    }
+                )
+            )
 
     def _handle(self, m: dict) -> None:
         ch = m.get("channel")
@@ -127,6 +146,36 @@ class LiveCollector:
                 }
             )
             self.n_ctx += 1
+        elif ch == "l2Book":
+            self._sample_book(m["data"])
+
+    def _sample_book(self, d: dict) -> None:
+        """Persist a top-of-book snapshot, throttled to one per coin per book_secs.
+
+        The l2Book feed pushes on every change; we only keep a periodic snapshot
+        so the depth heatmap stays a manageable size. ``levels`` is ``[bids, asks]``,
+        each a list of ``{px, sz, n}`` from best to worst.
+        """
+        coin = d["coin"]
+        now = time.time()
+        if now - self._book_last.get(coin, 0.0) < self.book_secs:
+            return
+        self._book_last[coin] = now
+        ts = int(d.get("time", now * 1000))
+        for side, levels in zip(("bid", "ask"), d["levels"]):
+            for lvl, level in enumerate(levels):
+                self._book.append(
+                    {
+                        "ts": ts,
+                        "coin": coin,
+                        "side": side,
+                        "lvl": lvl,
+                        "px": float(level["px"]),
+                        "sz": float(level["sz"]),
+                        "n": int(level["n"]),
+                    }
+                )
+                self.n_book += 1
 
     def _maybe_flush(self) -> None:
         if time.time() - self._last_flush >= self.flush_secs:
@@ -144,8 +193,14 @@ class LiveCollector:
                 self.outdir / "assetctx" / f"{stamp}.parquet", index=False
             )
             self._ctx = []
+        if self._book:
+            pd.DataFrame(self._book).to_parquet(
+                self.outdir / "book" / f"{stamp}.parquet", index=False
+            )
+            self._book = []
         self._last_flush = time.time()
         print(
-            f"[flush {stamp}] cumulative trades={self.n_trades} ctx={self.n_ctx}",
+            f"[flush {stamp}] cumulative trades={self.n_trades} "
+            f"ctx={self.n_ctx} book={self.n_book}",
             flush=True,
         )
