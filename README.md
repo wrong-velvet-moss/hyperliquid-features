@@ -73,6 +73,22 @@ hypertable schema and upserts with `ON CONFLICT DO NOTHING`, so re-running it is
 safe — only new rows are inserted. Run it on a loop, or after each collection
 session, to keep Grafana fed.
 
+### The dashboard
+
+Grafana auto-provisions **Hyperliquid — Live Market Monitor** (folder
+`hl-signals`, `grafana/dashboards/live_market_monitor.json`). It has a
+multi-select `coin` filter and, per coin over time:
+
+- **Latest snapshot** table — mark, premium, funding, OI, 24h notional volume
+- **Mark price** and **Open interest**
+- **Premium** (mark vs oracle) and **Funding rate** (8h)
+- **Cumulative volume delta** — running signed taker flow (buys − sells)
+- **OI-contraction liquidation proxy** — signed: positive = short flush
+  (OI down while price up), negative = long flush
+
+Edits to the JSON are picked up live (the provider watches the folder), so you
+can tweak panels in the Grafana UI and copy the model back into the repo.
+
 ## Quickstart
 
 This is a [uv](https://docs.astral.sh/uv/) project — `uv` reads `pyproject.toml`,
