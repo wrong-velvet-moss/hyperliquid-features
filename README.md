@@ -5,6 +5,25 @@ Collect Hyperliquid market data and test whether it's **predictive of forward re
 Original goal: liquidations + order flow + stop/TP + a fair-value figure. The
 research below changed the plan once we confirmed what's actually obtainable.
 
+## Motivation
+
+The idea came from watching the **order book**: deep resting levels kept showing
+up clustered around **liquidation prices near the mid**, not spread randomly
+through the book. That's the footprint **uninformed flow** leaves — retail
+traders who manage risk almost entirely with **stop-loss and take-profit**
+orders, parked at round numbers and obvious liquidation levels.
+
+If that positioning is this concentrated and predictable, there may be **alpha**
+in it. Informed traders rarely telegraph their exits this way, so the resting
+stop/TP book reads as a **proxy for where forced selling/buying will hit**. And
+because the same uninformed positioning exists on every venue, it's a window
+into **cross-exchange liquidation flow** — not just Hyperliquid's own book.
+
+This study tests that hypothesis: collect the real, per-address **stop/TP
+triggers** (genuinely public on an on-chain CLOB — see below), map where they
+cluster relative to price, and check whether those clusters are **predictive of
+forward returns**.
+
 ## What's publicly available (verified against the live API, June 2026)
 
 | Signal | Public? | Source |
@@ -66,9 +85,9 @@ datasource. Override ports/credentials by copying `.env.example` → `.env`.
 
 The collector also samples the **L2 order book** (`l2Book`, top 20 levels per
 side, one snapshot per coin every `book_secs`) into `book_levels` — everyone's
-resting limit orders aggregated by price. Stop-loss / take-profit triggers are
-also public (per address) and collected via `make triggers` — see the table
-above and `scripts/poll_triggers.py`.
+resting limit orders aggregated by price. Stop-loss / take-profit trigger orders
+are also public (per address) and collected separately via `make triggers` — see
+the table above and `scripts/poll_triggers.py`.
 
 ### Getting data into the dashboard
 
