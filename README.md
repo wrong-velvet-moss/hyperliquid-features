@@ -70,23 +70,57 @@ Verified against the live API, June 2026.
 > *estimate* of the full-universe what-if, since true liquidations aren't in a
 > public feed.
 
-## Findings so far
+## The flows we're hunting
 
-`reports/fairvalue_spike.md` (regenerate with `make spike`) — 54,739 coin-hours
-across 19 perps, 2026-02-10 → 2026-06-10:
+The signal we care about is not price discovery — it's the **mechanical exit
+footprint** left by leveraged, retail-heavy flow. Three structural flows drive it,
+each with a distinct shape on the tape:
 
-- **Premium is the strongest signal, and its IC is consistently negative**: higher
-  premium → slightly lower forward returns, growing with horizon (8h pooled IC
-  ≈ −0.03, 24h ≈ −0.037, de-overlapped p-values significant). That is the
-  **mean-reversion direction the hypothesis predicts.**
-- It is strongest in the most liquid, retail-traded names — ETH (−0.108), LINK
-  (−0.106), ADA (−0.098), SUI, DOGE — and near zero in thinner names.
-- **`funding_z` is effectively noise** (IC ≈ 0, not significant).
+- **Liquidations** are *involuntary* and *price-insensitive*. When margin breaches
+  maintenance, the venue's liquidation engine closes the position with market
+  orders regardless of where price is — a burst of one-sided flow that pushes mark
+  away from oracle. The footprint is a sharp open-interest contraction coincident
+  with a one-sided trade burst and a widening premium. Forced at the worst possible
+  moment, they are the cleanest case of uninformed flow.
+- **Stop-losses** are resting trigger orders that flip to market orders when price
+  crosses a level. They **cluster** just beyond round numbers and recent swing
+  highs/lows, and they **cascade**: one stop's market impact drags price into the
+  next, so a cluster being hit reads as a self-reinforcing momentum burst. The
+  level is knowable *before* the move.
+- **Take-profits** are the mirror image — resting triggers that *fade* a move and
+  supply mean-reverting liquidity into a trend. The disposition effect packs them
+  closer to entry on the winning side, so they mark where a move is likely to
+  stall.
 
-The edge is small (|IC| ≈ 0.02–0.05) but directionally consistent — a real, weak
-mean-reversion signal at this frequency rather than a tradeable alpha on its own.
-The liquidation-proxy and trigger-cluster legs of the hypothesis are collected but
-not yet tested at scale (see [Roadmap](#roadmap)).
+### When the footprint should be legible
+
+These are structural priors the pipeline is built to test, not results — but each
+has a concrete reason to expect a visible signature:
+
+- **Visibility.** Hyperliquid is an on-chain CLOB, so resting stop/TP triggers are
+  queryable *per address* and liquidations leave an unambiguous OI-plus-trade
+  signature. Unlike a centralized venue, a meaningful part of this flow is
+  observable *ex ante* — the price levels where it will fire are sitting in the
+  book — rather than only inferable after the fact.
+- **Periodic seasonality.** Exits plausibly cluster on a clock: funding-settlement
+  times, session opens and closes (Asia → EU → US), end-of-day risk trimming, and
+  thin weekends. If forced/mechanical exits concentrate on a schedule, the
+  dislocations they cause may be partly predictable in *time* as well as in price.
+- **Volatility clustering.** Liquidations and stop cascades are self-exciting — a
+  large move trips stops and liqs, which produce more move (Hawkes-like). So the
+  forced-exit footprint should concentrate in high-volatility regimes and all but
+  vanish in calm tape; conditioning a signal on the volatility regime should
+  sharpen it rather than averaging it away.
+- **Retail in low liquidity.** Leveraged retail flow is proportionally largest when
+  professional liquidity steps away — overnight, weekends, holidays, and thinner
+  alts. In those windows the uninformed footprint is a bigger share of volume, so
+  the mechanical-exit dislocation should be larger and mean-revert more cleanly
+  than the same flow would in a deep, well-arbitraged book.
+
+The repo collects exactly the inputs these priors need — the fair-value gap, an
+OI-contraction liquidation proxy, and real per-address trigger orders — so each can
+be run through the same information-coefficient harness against forward returns as
+the empirical legs are wired up (see [Roadmap](#roadmap)).
 
 ## Repository layout
 
