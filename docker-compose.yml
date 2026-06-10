@@ -1,0 +1,51 @@
+name: hl-signals
+
+services:
+  timescaledb:
+    image: timescale/timescaledb:2.17.2-pg17
+    container_name: hl_timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hl}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hl}
+      POSTGRES_DB: ${POSTGRES_DB:-hlsignals}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - tsdb_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hl} -d ${POSTGRES_DB:-hlsignals}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: hl_grafana
+    restart: unless-stopped
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      # Consumed by the provisioned datasource (grafana/provisioning/datasources).
+      HL_DB_HOST: timescaledb
+      HL_DB_PORT: "5432"
+      HL_DB_NAME: ${POSTGRES_DB:-hlsignals}
+      HL_DB_USER: ${POSTGRES_USER:-hl}
+      HL_DB_PASSWORD: ${POSTGRES_PASSWORD:-hl}
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+volumes:
+  tsdb_data:
+  grafana_data:
