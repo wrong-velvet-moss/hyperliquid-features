@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from .api import HyperliquidInfo
+from ..api import HyperliquidInfo
 
 
 def perp_contexts(client: HyperliquidInfo | None = None) -> pd.DataFrame:

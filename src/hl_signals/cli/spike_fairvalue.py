@@ -6,24 +6,20 @@ information coefficient (IC) for each signal x horizon, plus quantile-bucket
 forward returns and a per-coin breakdown. Writes reports/fairvalue_spike.md.
 
 Usage:
-    python scripts/spike_fairvalue.py
+    uv run hl-spike-fairvalue
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from ..research.labels import DEFAULT_HORIZONS, add_forward_returns, add_funding_zscore
+from ..research.predictive import ic_grid, per_coin_ic, quantile_table
 
-from hlsignals.labels import DEFAULT_HORIZONS, add_forward_returns, add_funding_zscore
-from hlsignals.predictive import ic_grid, per_coin_ic, quantile_table
-
-ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "data"
-REPORTS = ROOT / "reports"
+DATA = Path("data")
+REPORTS = Path("reports")
 
 SIGNALS = ["fundingRate", "premium", "funding_z"]
 HORIZONS = list(DEFAULT_HORIZONS)
@@ -80,7 +76,7 @@ def main() -> None:
     md.append(fmt(coin_ic))
     report = "\n".join(md) + "\n"
 
-    REPORTS.mkdir(exist_ok=True)
+    REPORTS.mkdir(parents=True, exist_ok=True)
     (REPORTS / "fairvalue_spike.md").write_text(report)
 
     # console summary

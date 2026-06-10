@@ -6,23 +6,20 @@ proxy, and runs the SAME IC harness as the fair-value spike. Horizons are in BAR
 (at the chosen --freq), not hours.
 
 Usage:
-    python scripts/collect_live.py --n 20            # let this run for hours/days first
-    python scripts/spike_liquidations.py --freq 5min
+    uv run hl-collect --n 20            # let this run for hours/days first
+    uv run hl-spike-liquidations --freq 5min
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from ..research.labels import add_forward_returns
+from ..research.livepanel import add_liq_proxy, load_live, resample_panel
+from ..research.predictive import ic_grid, quantile_table
 
-from hlsignals.labels import add_forward_returns
-from hlsignals.livepanel import add_liq_proxy, load_live, resample_panel
-from hlsignals.predictive import ic_grid, quantile_table
-
-LIVE = Path(__file__).resolve().parents[1] / "data" / "live"
+LIVE = Path("data/live")
 SIGNALS = [
     "liq_pressure",
     "long_liq_proxy",
@@ -44,9 +41,7 @@ def main() -> None:
 
     trades, ctx = load_live(LIVE)
     if ctx.empty:
-        raise SystemExit(
-            "no collected data in data/live/ — run scripts/collect_live.py first"
-        )
+        raise SystemExit("no collected data in data/live/ — run hl-collect first")
 
     panel = add_liq_proxy(resample_panel(trades, ctx, freq=args.freq))
     panel = add_forward_returns(panel, HORIZONS, price_col="markPx")
@@ -61,7 +56,7 @@ def main() -> None:
             f"\n[!] Only ~{n} usable bars. This is a PIPELINE SMOKE TEST, not a real result —"
         )
         print(
-            f"    let scripts/collect_live.py run until you have >~{MIN_BARS} bars (hours/days), then rerun."
+            f"    let hl-collect run until you have >~{MIN_BARS} bars (hours/days), then rerun."
         )
 
     grid = ic_grid(panel, SIGNALS, HORIZONS)

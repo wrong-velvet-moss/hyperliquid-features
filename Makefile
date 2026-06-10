@@ -7,7 +7,7 @@ export
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help env up down restart logs ps psql load meta triggers triggers-loop retention collect live fetch spike fmt check hooks precommit
+.PHONY: help env up down restart logs ps psql load meta triggers triggers-loop retention collect live fetch spike spike-liq fmt check hooks precommit
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -37,32 +37,35 @@ psql: ## Open a psql shell on TimescaleDB
 	docker compose exec timescaledb psql -U $${POSTGRES_USER:-hl} -d $${POSTGRES_DB:-hlsignals}
 
 load: ## Load collected data/live parquet into TimescaleDB
-	uv run scripts/load_db.py
+	uv run hl-load-db
 
 meta: ## Refresh per-coin perp metadata (max leverage) into coin_meta
-	uv run scripts/load_meta.py
+	uv run hl-load-meta
 
 triggers: ## Poll real stop/TP (trigger) orders into trigger_orders (one sweep)
-	uv run scripts/poll_triggers.py
+	uv run hl-poll-triggers
 
 triggers-loop: ## Keep refreshing stop/TP orders (sweep, sleep 15m, repeat)
-	uv run scripts/poll_triggers.py --loop 900
+	uv run hl-poll-triggers --loop 900
 
 retention: ## Apply TimescaleDB retention policies (rolling buffer) to a running DB
 	docker compose exec -T timescaledb psql -U $${POSTGRES_USER:-hl} -d $${POSTGRES_DB:-hlsignals} \
 		-f /docker-entrypoint-initdb.d/04_retention.sql
 
 collect: ## Run the live WS collector (writes data/live/*.parquet)
-	uv run scripts/collect_live.py
+	uv run hl-collect
 
 live: ## Stream market data straight into TimescaleDB (hands-off live; Ctrl-C to stop)
-	uv run scripts/collect_live.py --sink db
+	uv run hl-collect --sink db
 
 fetch: ## Pull the fair-value panel from the public API
-	uv run scripts/fetch_fairvalue.py
+	uv run hl-fetch-fairvalue
 
 spike: ## Run the fair-value predictiveness test
-	uv run scripts/spike_fairvalue.py
+	uv run hl-spike-fairvalue
+
+spike-liq: ## Run the OI-liquidation-proxy predictiveness test (needs collected data)
+	uv run hl-spike-liquidations
 
 fmt: ## Format Python with ruff
 	uv run ruff format .

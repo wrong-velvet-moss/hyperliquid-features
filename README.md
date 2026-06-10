@@ -59,7 +59,7 @@ Verified against the live API, June 2026.
 | Signal | Public? | Source |
 | --- | --- | --- |
 | **Fair value** — oracle px, mark px, mid, **premium**, **funding**, open interest | ✅ free | `metaAndAssetCtxs`, `fundingHistory`, `candleSnapshot` |
-| **Stop-loss / take-profit orders** | ✅ public, *per address* | Hyperliquid is an on-chain CLOB, so other users' resting trigger orders are queryable: `frontendOpenOrders(user)` returns their stops/TPs with exact `triggerPx`. There is no global firehose, so a market-wide view is *reconstructed* by enumerating addresses (leaderboard + the trade tape) and polling each — see `scripts/poll_triggers.py`. |
+| **Stop-loss / take-profit orders** | ✅ public, *per address* | Hyperliquid is an on-chain CLOB, so other users' resting trigger orders are queryable: `frontendOpenOrders(user)` returns their stops/TPs with exact `triggerPx`. There is no global firehose, so a market-wide view is *reconstructed* by enumerating addresses (leaderboard + the trade tape) and polling each — see `hl-poll-triggers` (`src/hl_signals/cli/poll_triggers.py`). |
 | **Liquidations** | ⚠️ no clean feed | The public `trades` stream carries no liquidation flag. The truth source is the S3 node archive (`node_fills_by_block`, requester-pays) where each fill keeps a `liquidation` object — not yet wired up. In the meantime we use a **free OI-contraction proxy** built from the live `assetctx` + `trades` feeds. |
 
 > **Note on an earlier claim.** A previous version of this repo asserted stop/TP
@@ -90,25 +90,31 @@ not yet tested at scale (see [Roadmap](#roadmap)).
 
 ## Repository layout
 
+A standard `src/` layout. The package is `hl_signals`; the runnable commands
+are registered as console scripts in `pyproject.toml` (`[project.scripts]`) and
+invoked with `uv run <command>`.
+
 ```
-hlsignals/
-  api.py          # rate-limit-aware Hyperliquid `info` REST client
-  universe.py     # top-N perps by 24h volume + live fair-value snapshot
-  fairvalue.py    # hourly funding/premium + OHLCV panel
-  labels.py       # forward returns, funding z-score
-  predictive.py   # information coefficient, de-overlapped IC, quantile buckets
-  liquidations.py # S3 node-archive liquidations (true-label path; NotImplemented stub)
-  collector.py    # live WS collector: trades + assetCtx + L2 book -> parquet and/or DB
-  livepanel.py    # assemble collected live parquet into a bar panel + OI liq proxy
-  store.py        # TimescaleDB sink (idempotent COPY + ON CONFLICT DO NOTHING)
-scripts/
-  fetch_fairvalue.py    # pull data           -> data/fairvalue_panel.parquet
-  spike_fairvalue.py    # predictiveness test -> reports/fairvalue_spike.md
-  collect_live.py       # run the live collector (parquet / db / both)
-  spike_liquidations.py # IC harness on the collected OI-based liquidation proxy
-  load_db.py            # upsert collected live parquet into TimescaleDB
-  load_meta.py          # per-coin max leverage -> coin_meta (for the modeled heatmap)
-  poll_triggers.py      # sweep real stop/TP orders per address -> trigger_orders
+src/hl_signals/
+  api.py            # rate-limit-aware Hyperliquid `info` REST client
+  store.py          # TimescaleDB sink (idempotent COPY + ON CONFLICT DO NOTHING)
+  ingest/           # getting market data in
+    universe.py     # top-N perps by 24h volume + live fair-value snapshot
+    collector.py    # live WS collector: trades + assetCtx + L2 book -> parquet and/or DB
+    fairvalue.py    # hourly funding/premium + OHLCV panel
+  research/         # testing predictiveness
+    labels.py       # forward returns, funding z-score
+    predictive.py   # information coefficient, de-overlapped IC, quantile buckets
+    livepanel.py    # assemble collected live parquet into a bar panel + OI liq proxy
+    liquidations.py # S3 node-archive liquidations (true-label path; NotImplemented stub)
+  cli/              # console entry points (one main() each)
+    fetch_fairvalue.py    # hl-fetch-fairvalue    pull data -> data/fairvalue_panel.parquet
+    spike_fairvalue.py    # hl-spike-fairvalue    predictiveness test -> reports/fairvalue_spike.md
+    collect.py            # hl-collect            run the live collector (parquet / db / both)
+    spike_liquidations.py # hl-spike-liquidations IC harness on the OI-based liquidation proxy
+    load_db.py            # hl-load-db            upsert collected live parquet into TimescaleDB
+    load_meta.py          # hl-load-meta          per-coin max leverage -> coin_meta (modeled heatmap)
+    poll_triggers.py      # hl-poll-triggers      sweep real stop/TP orders per address -> trigger_orders
 db/init/          # TimescaleDB schema + retention (auto-applied on first start)
 grafana/          # provisioned datasource + dashboards (auto-loaded)
 docker-compose.yml # Grafana + TimescaleDB monitoring stack
@@ -122,13 +128,14 @@ creates the virtualenv, and installs dependencies on first `uv run`. No Docker
 needed for the core test.
 
 ```bash
-uv run scripts/fetch_fairvalue.py --n 20 --days 120   # ~1 min, free public API
-uv run scripts/spike_fairvalue.py                     # prints IC table + writes report
+uv run hl-fetch-fairvalue --n 20 --days 120   # ~1 min, free public API
+uv run hl-spike-fairvalue                      # prints IC table + writes report
 ```
 
-`fetch_fairvalue.py` pulls the top-N perps by 24h volume into
-`data/fairvalue_panel.parquet`; `spike_fairvalue.py` runs the IC harness and writes
-`reports/fairvalue_spike.md`.
+`hl-fetch-fairvalue` pulls the top-N perps by 24h volume into
+`data/fairvalue_panel.parquet`; `hl-spike-fairvalue` runs the IC harness and writes
+`reports/fairvalue_spike.md`. (Both commands resolve `data/`/`reports/` relative to
+the current directory, so run them from the repo root.)
 
 ## Live monitoring stack — Grafana + TimescaleDB
 
@@ -165,7 +172,7 @@ make triggers-loop   # re-sweep real stop/TP orders every 15 min (background)
 make retention       # rolling buffer: trades/book 7d, assetctx/triggers 30d
 ```
 
-`make load` (`scripts/load_db.py`) maps the collector's part-files onto the schema
+`make load` (`hl-load-db`) maps the collector's part-files onto the schema
 and upserts with `ON CONFLICT DO NOTHING`, so re-running it is safe. The WS market
 data is truly live (sub-minute); stop/TP orders have no firehose, so
 `triggers-loop` refreshes them on a rate-limited sweep. `make retention` keeps the
@@ -195,7 +202,7 @@ are picked up live, so you can tweak panels in the UI and copy the model back.
 
 ## Reading the predictiveness results
 
-`spike_fairvalue.py` reports the **information coefficient** (Spearman rank
+`hl-spike-fairvalue` reports the **information coefficient** (Spearman rank
 correlation between each signal and the forward return) for funding / premium /
 funding-z over 1/4/8/24h, plus quintile-bucket forward returns and a per-coin
 breakdown.
