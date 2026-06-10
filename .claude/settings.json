@@ -31,8 +31,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/remind-ship.sh\"",
-            "timeout": 20
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/auto-ship.sh\"",
+            "timeout": 180,
+            "statusMessage": "Auto-shipping: push + PR…"
           }
         ]
       }

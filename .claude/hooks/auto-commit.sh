@@ -38,8 +38,14 @@ if git diff --cached --quiet -- "$file" 2>/dev/null; then
 fi
 
 rel="${file#"$root"/}"
+
+# Skip pre-commit only when it isn't installed — otherwise the commit aborts with
+# "pre-commit not found". When pre-commit IS available, let it run as the safety net.
+verify_flag=""
+command -v pre-commit >/dev/null 2>&1 || verify_flag="--no-verify"
+
 commit_one() {
-  git commit --quiet -m "chore: update ${rel}" -- "$file" >/dev/null 2>/tmp/claude-autocommit.err
+  git commit $verify_flag --quiet -m "chore: update ${rel}" -- "$file" >/dev/null 2>/tmp/claude-autocommit.err
 }
 
 if commit_one; then
