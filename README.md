@@ -79,24 +79,27 @@ hypertable schema and upserts with `ON CONFLICT DO NOTHING`, so re-running it is
 safe — only new rows are inserted. Run it on a loop, or after each collection
 session, to keep Grafana fed.
 
-### The dashboard
+### Dashboards
 
-Grafana auto-provisions **Hyperliquid — Live Market Monitor** (folder
-`hl-signals`, `grafana/dashboards/live_market_monitor.json`). It has a
-multi-select `coin` filter and, per coin over time:
+Grafana auto-provisions four dashboards into the `hl-signals` folder
+(`grafana/dashboards/*.json`). **Real** = actual public data; **modeled** = an
+estimate, clearly labelled.
 
-- **Latest snapshot** table — mark, premium, funding, OI, 24h notional volume
-- **Mark price** and **Open interest**
-- **Premium** (mark vs oracle) and **Funding rate** (8h)
-- **Cumulative volume delta** — running signed taker flow (buys − sells)
-- **OI-contraction liquidation proxy** — signed: positive = short flush
-  (OI down while price up), negative = long flush
+| Dashboard | Shows | Source |
+| --- | --- | --- |
+| **Live Market Monitor** | Per-coin mark, OI, premium, funding, cumulative volume delta, OI-contraction liq proxy | `assetctx` + `trades` — ✅ real |
+| **Order Book Depth** | Resting-depth heatmap (size by bps from mid), bid vs ask depth, spread, largest walls | `book_levels` (L2) — ✅ real, *everyone's resting orders* |
+| **Order Flow & Forced Exits** | Whale tape (large executed trades over a notional threshold), large-trade net notional, signed liq-pressure, biggest OI-drop events | `trades` + `assetctx` — ✅ real |
+| **Modeled Liquidation Heatmap** | Estimated liq clusters by bps from price + per-leverage-tier liq levels | `assetctx` + `coin_meta` — ⚠️ **modeled, not real orders** |
 
-A second dashboard, **Hyperliquid — Order Book Depth**
-(`grafana/dashboards/order_book_depth.json`), visualises the public L2 book for a
-selected coin: a **resting-depth heatmap** (size by bps from mid over time), bid
-vs ask depth, top-of-book spread, and a **largest-walls** table. This is the real
-"everyone's orders" view — resting limit orders, not the private stop/TP triggers.
+On Hyperliquid, **stop-loss / take-profit trigger orders are private** and never
+appear in any public feed. The first three dashboards are the genuine
+"everyone's orders" views (resting limit orders + executed trades + the
+forced-exit proxy). The Modeled Liquidation Heatmap is the estimate other sites
+present as a "liq/stop heatmap" — it's a what-if projection, labelled as such.
+
+The modeled heatmap needs per-coin leverage caps: `make meta` (refreshes the
+`coin_meta` table; rarely changes).
 
 Edits to any dashboard JSON are picked up live (the provider watches the folder),
 so you can tweak panels in the Grafana UI and copy the model back into the repo.
