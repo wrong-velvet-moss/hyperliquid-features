@@ -1,0 +1,98 @@
+{
+  "uid": "hl-real-stop-tp",
+  "title": "Hyperliquid — Stop / Take-Profit Orders (REAL)",
+  "tags": ["hyperliquid", "stops"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "coin",
+        "label": "Coin",
+        "type": "query",
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+        "query": "SELECT DISTINCT coin FROM trigger_orders ORDER BY 1",
+        "definition": "SELECT DISTINCT coin FROM trigger_orders ORDER BY 1",
+        "refresh": 2,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": { "text": "BTC", "value": "BTC" }
+      }
+    ]
+  },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "## ✅ REAL stop-loss / take-profit orders\nThese are **actual resting trigger orders of other traders** for `$coin`, polled per-address from the public `frontendOpenOrders` endpoint (Hyperliquid is an on-chain CLOB, so triggers are public). Run `make triggers` to refresh; the more addresses collected (via `make collect`/`make load`), the fuller the picture. Heatmap = number of trigger orders at each price offset from mark, per sweep. _Unlike the 'Modeled Liquidation Heatmap', this is not an estimate — these orders exist._"
+      }
+    },
+    {
+      "id": 2,
+      "type": "heatmap",
+      "title": "Resting stop/TP triggers — count by bps from mark",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 3 },
+      "options": {
+        "calculate": false,
+        "color": { "mode": "scheme", "scheme": "Oranges", "steps": 64, "reverse": false, "exponent": 0.5, "fill": "dark-orange" },
+        "cellGap": 1,
+        "yAxis": { "axisPlacement": "left", "reverse": false, "unit": "none", "axisLabel": "bps from mark (− below / + above price)" },
+        "rowsFrame": { "layout": "auto", "value": "trigger count" },
+        "tooltip": { "show": true, "yHistogram": false },
+        "legend": { "show": true },
+        "filterValues": { "le": 1e-9 }
+      },
+      "fieldConfig": {
+        "defaults": { "custom": { "hideFrom": { "tooltip": false, "viz": false, "legend": false }, "scaleDistribution": { "type": "linear" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "WITH mark AS (\n  SELECT last(mark_px, time) AS m FROM assetctx WHERE coin='$coin' AND $__timeFilter(time)\n)\nSELECT tr.time AS \"time\",\n       (round(((tr.trigger_px/mark.m - 1)*10000)/25.0)*25)::int::text AS metric,\n       count(*) AS n_triggers\nFROM trigger_orders tr, mark\nWHERE tr.coin='$coin' AND $__timeFilter(tr.time) AND tr.trigger_px > 0\n  AND abs((tr.trigger_px/mark.m - 1)*10000) <= 1500\nGROUP BY tr.time, 2\nORDER BY tr.time"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Current resting triggers (latest sweep)",
+      "description": "Real stop-loss / take-profit orders of other traders at the most recent sweep, by price, with distance from mark.",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 14 },
+      "options": { "showHeader": true, "cellHeight": "sm", "sortBy": [ { "displayName": "trigger_px", "desc": true } ] },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "filterable": true } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "trigger_px" }, "properties": [ { "id": "unit", "value": "currencyUSD" } ] },
+          { "matcher": { "id": "byName", "options": "kind" }, "properties": [ { "id": "mappings", "value": [ { "type": "value", "options": { "STOP": { "color": "red", "index": 0 }, "TP": { "color": "green", "index": 1 } } } ] }, { "id": "custom.cellOptions", "value": { "type": "color-text" } } ] }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH mark AS (\n  SELECT last(mark_px, time) AS m FROM assetctx WHERE coin='$coin' AND $__timeFilter(time)\n), snap AS (\n  SELECT max(time) AS t FROM trigger_orders WHERE coin='$coin' AND $__timeFilter(time)\n)\nSELECT CASE WHEN tr.order_type LIKE 'Stop%' THEN 'STOP' ELSE 'TP' END AS kind,\n       round(tr.trigger_px::numeric, 2) AS trigger_px,\n       round(((tr.trigger_px/mark.m - 1)*10000)::numeric, 0) AS bps_from_mark,\n       count(*) AS orders,\n       round(sum(tr.sz)::numeric, 4) AS total_sz\nFROM trigger_orders tr, mark, snap\nWHERE tr.coin='$coin' AND tr.time = snap.t AND tr.trigger_px > 0\nGROUP BY kind, tr.trigger_px, bps_from_mark\nORDER BY trigger_px DESC\nLIMIT 50"
+        }
+      ]
+    }
+  ]
+}

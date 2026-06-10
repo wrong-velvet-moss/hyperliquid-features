@@ -11,12 +11,15 @@ research below changed the plan once we confirmed what's actually obtainable.
 | --- | --- | --- |
 | **Fair value** (oracle px, mark px, mid, **premium**, **funding**, OI) | ✅ free | `metaAndAssetCtxs`, `fundingHistory`, `candleSnapshot` |
 | **Liquidations** | ⚠️ no clean feed | No flag in the public `trades` stream. Historical = parse S3 `node_fills_by_block` (requester-pays) where each fill keeps a `liquidation` object; or 3rd parties (CoinGlass/Coinalyze/Allium). Live = collect `trades` WS yourself. |
-| **Stop-loss / take-profit orders** | ❌ impossible | Other users' trigger orders are never public — invisible until they fire. Any "stop/TP heatmap" elsewhere is *modeled*, not real data. |
+| **Stop-loss / take-profit orders** | ✅ public, per address | Hyperliquid is an on-chain CLOB, so other users' trigger orders **are** queryable: `frontendOpenOrders(user)` returns their resting stops/TPs with exact `triggerPx`. There's no global firehose, so a market-wide view is *reconstructed* by enumerating addresses (from the trade tape) and polling each — see `scripts/poll_triggers.py`. The S3 node archive is the exhaustive source. |
 
-**Design consequence:** stop/TP is dropped (substitute liquidations + open
-interest as the forced-flow / positioning proxy). We lead with the **fair-value
-spike** because it's free and pullable in minutes; liquidations are step 2 and
-need paid S3 access (see `hlsignals/liquidations.py`).
+**Correction:** an earlier version of this repo claimed stop/TP orders were
+*impossible* to obtain. That was wrong — they're public per address (verified
+live: a 150-address sweep returned real Stop Market / Take Profit orders with
+exact trigger prices). The **Stop / Take-Profit Orders (REAL)** dashboard shows
+them; the **Modeled Liquidation Heatmap** remains as a separate *estimate* for
+the full-universe what-if. We still lead with the **fair-value spike** because
+it's free and pullable in minutes.
 
 ## Layout
 
@@ -81,7 +84,7 @@ session, to keep Grafana fed.
 
 ### Dashboards
 
-Grafana auto-provisions four dashboards into the `hl-signals` folder
+Grafana auto-provisions five dashboards into the `hl-signals` folder
 (`grafana/dashboards/*.json`). **Real** = actual public data; **modeled** = an
 estimate, clearly labelled.
 
@@ -90,16 +93,18 @@ estimate, clearly labelled.
 | **Live Market Monitor** | Per-coin mark, OI, premium, funding, cumulative volume delta, OI-contraction liq proxy | `assetctx` + `trades` — ✅ real |
 | **Order Book Depth** | Resting-depth heatmap (size by bps from mid), bid vs ask depth, spread, largest walls | `book_levels` (L2) — ✅ real, *everyone's resting orders* |
 | **Order Flow & Forced Exits** | Whale tape (large executed trades over a notional threshold), large-trade net notional, signed liq-pressure, biggest OI-drop events | `trades` + `assetctx` — ✅ real |
+| **Stop / Take-Profit Orders (REAL)** | Other traders' resting stop-loss / take-profit triggers by price + a clusters table | `trigger_orders` — ✅ real, *actual stop/TP orders* |
 | **Modeled Liquidation Heatmap** | Estimated liq clusters by bps from price + per-leverage-tier liq levels | `assetctx` + `coin_meta` — ⚠️ **modeled, not real orders** |
 
-On Hyperliquid, **stop-loss / take-profit trigger orders are private** and never
-appear in any public feed. The first three dashboards are the genuine
-"everyone's orders" views (resting limit orders + executed trades + the
-forced-exit proxy). The Modeled Liquidation Heatmap is the estimate other sites
-present as a "liq/stop heatmap" — it's a what-if projection, labelled as such.
+Other traders' resting limit orders, executed trades, **and stop/TP triggers**
+are all genuinely public on Hyperliquid (it's an on-chain CLOB) — the first four
+dashboards are real. The Modeled Liquidation Heatmap is the estimate other sites
+present as a "liq/stop heatmap" for the full user base — a what-if projection,
+labelled as such.
 
-The modeled heatmap needs per-coin leverage caps: `make meta` (refreshes the
-`coin_meta` table; rarely changes).
+Feed the real stop/TP view with `make triggers` (polls per-address trigger
+orders); the modeled heatmap needs per-coin leverage caps via `make meta`. Both
+read addresses/coins accumulated by `make collect` + `make load`.
 
 Edits to any dashboard JSON are picked up live (the provider watches the folder),
 so you can tweak panels in the Grafana UI and copy the model back into the repo.
