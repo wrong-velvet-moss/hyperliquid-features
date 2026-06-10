@@ -1,0 +1,159 @@
+{
+  "uid": "hl-orderbook-depth",
+  "title": "Hyperliquid — Order Book Depth",
+  "tags": ["hyperliquid", "orderbook"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "coin",
+        "label": "Coin",
+        "type": "query",
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+        "query": "SELECT DISTINCT coin FROM book_levels ORDER BY 1",
+        "definition": "SELECT DISTINCT coin FROM book_levels ORDER BY 1",
+        "refresh": 2,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": { "text": "BTC", "value": "BTC" }
+      }
+    ]
+  },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 2, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "**Everyone's resting limit orders** for `$coin`, aggregated by price (public L2 book, top 20 levels/side). Heatmap colour = total resting size at each price offset from mid. _Stop-loss / take-profit trigger orders are private on Hyperliquid and are **not** shown here — they don't exist in any public feed._"
+      }
+    },
+    {
+      "id": 2,
+      "type": "heatmap",
+      "title": "Resting depth heatmap — size by bps from mid",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 2 },
+      "options": {
+        "calculate": false,
+        "color": { "mode": "scheme", "scheme": "Turbo", "steps": 64, "reverse": false, "exponent": 0.5, "fill": "dark-orange" },
+        "cellGap": 1,
+        "yAxis": { "axisPlacement": "left", "reverse": false, "unit": "none", "axisLabel": "bps from mid" },
+        "rowsFrame": { "layout": "auto", "value": "resting size" },
+        "tooltip": { "show": true, "yHistogram": false },
+        "legend": { "show": true },
+        "filterValues": { "le": 1e-9 }
+      },
+      "fieldConfig": {
+        "defaults": { "custom": { "hideFrom": { "tooltip": false, "viz": false, "legend": false }, "scaleDistribution": { "type": "linear" } } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "WITH mids AS (\n  SELECT time,\n         max(px) FILTER (WHERE side='bid' AND lvl=0) AS bid0,\n         min(px) FILTER (WHERE side='ask' AND lvl=0) AS ask0\n  FROM book_levels\n  WHERE coin='$coin' AND lvl=0 AND $__timeFilter(time)\n  GROUP BY time\n), binned AS (\n  SELECT time_bucket('$__interval'::interval, b.time) AS t,\n         (round((((b.px/((m.bid0+m.ask0)/2.0))-1)*10000)/5.0)*5)::int AS bps_bin,\n         b.sz\n  FROM book_levels b\n  JOIN mids m USING (time)\n  WHERE b.coin='$coin' AND $__timeFilter(b.time)\n)\nSELECT t AS \"time\", bps_bin::text AS metric, sum(sz) AS depth\nFROM binned\nWHERE abs(bps_bin) <= 50\nGROUP BY t, bps_bin\nORDER BY t"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Resting depth: bid vs ask (sum of top 20 levels)",
+      "description": "Total resting size on each side. Bid > ask = more buy-side resting liquidity, and vice-versa.",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 25, "showPoints": "never", "stacking": { "mode": "none" } }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "bid" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "ask" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('$__interval'::interval, time) AS \"time\",\n       side AS metric,\n       sum(sz) AS depth\nFROM book_levels\nWHERE coin='$coin' AND $__timeFilter(time)\nGROUP BY 1, side\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Top-of-book spread (bps)",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "axisLabel": "spread (bps)" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('$__interval'::interval, time) AS \"time\",\n       'spread_bps' AS metric,\n       (min(px) FILTER (WHERE side='ask' AND lvl=0) - max(px) FILTER (WHERE side='bid' AND lvl=0))\n       / nullif((min(px) FILTER (WHERE side='ask' AND lvl=0) + max(px) FILTER (WHERE side='bid' AND lvl=0))/2, 0) * 10000 AS spread_bps\nFROM book_levels\nWHERE coin='$coin' AND lvl=0 AND $__timeFilter(time)\nGROUP BY 1\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Largest resting walls (latest snapshot)",
+      "description": "Biggest aggregated limit-order clusters right now, by side, with distance from mid.",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 21 },
+      "options": { "showHeader": true, "cellHeight": "sm", "sortBy": [ { "displayName": "sz", "desc": true } ] },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "filterable": true } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "px" }, "properties": [ { "id": "unit", "value": "currencyUSD" } ] },
+          { "matcher": { "id": "byName", "options": "bps_from_mid" }, "properties": [ { "id": "unit", "value": "none" }, { "id": "decimals", "value": 2 } ] }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH latest AS (\n  SELECT max(time) AS t FROM book_levels WHERE coin='$coin' AND $__timeFilter(time)\n), mid AS (\n  SELECT (max(b.px) FILTER (WHERE b.side='bid' AND b.lvl=0)\n        + min(b.px) FILTER (WHERE b.side='ask' AND b.lvl=0))/2.0 AS m\n  FROM book_levels b, latest WHERE b.coin='$coin' AND b.time=latest.t AND b.lvl=0\n)\nSELECT b.side,\n       b.px,\n       round(b.sz::numeric, 4) AS sz,\n       b.n AS orders,\n       round((((b.px/mid.m)-1)*10000)::numeric, 2) AS bps_from_mid\nFROM book_levels b, latest, mid\nWHERE b.coin='$coin' AND b.time=latest.t\nORDER BY b.sz DESC\nLIMIT 12"
+        }
+      ]
+    }
+  ]
+}
