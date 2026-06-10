@@ -101,6 +101,22 @@ hypertable schema and upserts with `ON CONFLICT DO NOTHING`, so re-running it is
 safe — only new rows are inserted. Run it on a loop, or after each collection
 session, to keep Grafana fed.
 
+#### Live mode (hands-off)
+
+To skip the manual `collect` → `load` cycle, stream straight into TimescaleDB —
+Grafana auto-refreshes, so the market dashboards update on their own:
+
+```bash
+make live            # collector writes trades/book/assetctx directly to the DB
+make triggers-loop   # re-sweep stop/TP orders every 15 min (background)
+make retention       # rolling buffer: drop old chunks (trades/book 7d, rest 30d)
+```
+
+The WS market data is truly live (sub-minute). Stop/TP orders have no firehose,
+so `triggers-loop` refreshes them periodically (a full sweep is rate-limited).
+`make retention` keeps the DB from growing forever — adjust the windows in
+`db/init/04_retention.sql`.
+
 ### Dashboards
 
 Grafana auto-provisions five dashboards into the `hl-signals` folder

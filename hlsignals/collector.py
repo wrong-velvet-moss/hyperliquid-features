@@ -35,12 +35,15 @@ class LiveCollector:
         outdir: str | Path,
         flush_secs: int = 60,
         book_secs: float = 5.0,
+        sink: str = "parquet",
     ) -> None:
         self.coins = coins
         self.outdir = Path(outdir)
-        (self.outdir / "trades").mkdir(parents=True, exist_ok=True)
-        (self.outdir / "assetctx").mkdir(parents=True, exist_ok=True)
-        (self.outdir / "book").mkdir(parents=True, exist_ok=True)
+        self.sink = sink  # "parquet" | "db" | "both"
+        if sink in ("parquet", "both"):
+            (self.outdir / "trades").mkdir(parents=True, exist_ok=True)
+            (self.outdir / "assetctx").mkdir(parents=True, exist_ok=True)
+            (self.outdir / "book").mkdir(parents=True, exist_ok=True)
         self.flush_secs = flush_secs
         self.book_secs = (
             book_secs  # min seconds between persisted book snapshots per coin
@@ -183,24 +186,57 @@ class LiveCollector:
 
     def _flush(self, force: bool = False) -> None:
         stamp = int(time.time())
-        if self._trades:
-            pd.DataFrame(self._trades).to_parquet(
-                self.outdir / "trades" / f"{stamp}.parquet", index=False
-            )
-            self._trades = []
-        if self._ctx:
-            pd.DataFrame(self._ctx).to_parquet(
-                self.outdir / "assetctx" / f"{stamp}.parquet", index=False
-            )
-            self._ctx = []
-        if self._book:
-            pd.DataFrame(self._book).to_parquet(
-                self.outdir / "book" / f"{stamp}.parquet", index=False
-            )
-            self._book = []
+        trades, ctx, book = self._trades, self._ctx, self._book
+        self._trades, self._ctx, self._book = [], [], []
+
+        if self.sink in ("parquet", "both"):
+            if trades:
+                pd.DataFrame(trades).to_parquet(
+                    self.outdir / "trades" / f"{stamp}.parquet", index=False
+                )
+            if ctx:
+                pd.DataFrame(ctx).to_parquet(
+                    self.outdir / "assetctx" / f"{stamp}.parquet", index=False
+                )
+            if book:
+                pd.DataFrame(book).to_parquet(
+                    self.outdir / "book" / f"{stamp}.parquet", index=False
+                )
+        if self.sink in ("db", "both") and (trades or ctx or book):
+            self._flush_db(trades, ctx, book)
+
         self._last_flush = time.time()
         print(
-            f"[flush {stamp}] cumulative trades={self.n_trades} "
+            f"[flush {stamp}] sink={self.sink} cumulative trades={self.n_trades} "
             f"ctx={self.n_ctx} book={self.n_book}",
             flush=True,
         )
+
+    def _flush_db(self, trades: list[dict], ctx: list[dict], book: list[dict]) -> None:
+        """Upsert the buffered records straight into TimescaleDB (live mode)."""
+        from hlsignals import store  # local import: parquet-only mode needs no DB layer
+
+        ctx_rename = {
+            "ts": "time",
+            "markPx": "mark_px",
+            "oraclePx": "oracle_px",
+            "midPx": "mid_px",
+            "openInterest": "open_interest",
+            "dayNtlVlm": "day_ntl_vlm",
+        }
+        try:
+            with store.connect() as conn:
+                if trades:
+                    df = pd.DataFrame(trades)
+                    df["time"] = pd.to_datetime(df["ts"], unit="ms", utc=True)
+                    store.upsert_trades(conn, df.drop(columns="ts"))
+                if ctx:
+                    df = pd.DataFrame(ctx).rename(columns=ctx_rename)
+                    df["time"] = pd.to_datetime(df["time"], unit="ms", utc=True)
+                    store.upsert_assetctx(conn, df)
+                if book:
+                    df = pd.DataFrame(book)
+                    df["time"] = pd.to_datetime(df["ts"], unit="ms", utc=True)
+                    store.upsert_book(conn, df.drop(columns="ts"))
+        except Exception as exc:  # don't let a DB hiccup kill the collector
+            print(f"[db flush error] {exc}", flush=True)

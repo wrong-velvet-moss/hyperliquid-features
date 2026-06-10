@@ -7,7 +7,7 @@ export
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help env up down restart logs ps psql load meta triggers collect fetch spike fmt check hooks precommit
+.PHONY: help env up down restart logs ps psql load meta triggers triggers-loop retention collect live fetch spike fmt check hooks precommit
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -42,11 +42,21 @@ load: ## Load collected data/live parquet into TimescaleDB
 meta: ## Refresh per-coin perp metadata (max leverage) into coin_meta
 	uv run scripts/load_meta.py
 
-triggers: ## Poll real stop/TP (trigger) orders into trigger_orders
+triggers: ## Poll real stop/TP (trigger) orders into trigger_orders (one sweep)
 	uv run scripts/poll_triggers.py
+
+triggers-loop: ## Keep refreshing stop/TP orders (sweep, sleep 15m, repeat)
+	uv run scripts/poll_triggers.py --loop 900
+
+retention: ## Apply TimescaleDB retention policies (rolling buffer) to a running DB
+	docker compose exec -T timescaledb psql -U $${POSTGRES_USER:-hl} -d $${POSTGRES_DB:-hlsignals} \
+		-f /docker-entrypoint-initdb.d/04_retention.sql
 
 collect: ## Run the live WS collector (writes data/live/*.parquet)
 	uv run scripts/collect_live.py
+
+live: ## Stream market data straight into TimescaleDB (hands-off live; Ctrl-C to stop)
+	uv run scripts/collect_live.py --sink db
 
 fetch: ## Pull the fair-value panel from the public API
 	uv run scripts/fetch_fairvalue.py
