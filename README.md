@@ -1,4 +1,4 @@
-# hl-signals
+# Hyperliquid Features
 
 Collect public Hyperliquid market data and test whether the footprints of
 **forced and mechanical exits** — liquidations, stop-losses, take-profits, and
