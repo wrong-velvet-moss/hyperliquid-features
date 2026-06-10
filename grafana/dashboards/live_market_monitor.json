@@ -1,0 +1,230 @@
+{
+  "uid": "hl-live-market",
+  "title": "Hyperliquid — Live Market Monitor",
+  "tags": ["hyperliquid", "live"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "coin",
+        "label": "Coin",
+        "type": "query",
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+        "query": "SELECT DISTINCT coin FROM assetctx ORDER BY 1",
+        "definition": "SELECT DISTINCT coin FROM assetctx ORDER BY 1",
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": null,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Latest snapshot (per coin)",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 0 },
+      "options": { "showHeader": true, "cellHeight": "sm" },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "filterable": true } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "mark" }, "properties": [ { "id": "unit", "value": "currencyUSD" } ] },
+          { "matcher": { "id": "byName", "options": "premium" }, "properties": [ { "id": "unit", "value": "percentunit" }, { "id": "decimals", "value": 4 } ] },
+          { "matcher": { "id": "byName", "options": "funding (8h)" }, "properties": [ { "id": "unit", "value": "percentunit" }, { "id": "decimals", "value": 5 } ] }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT coin,\n       last(mark_px, time)       AS \"mark\",\n       last(premium, time)       AS \"premium\",\n       last(funding, time)       AS \"funding (8h)\",\n       last(open_interest, time) AS \"open interest\",\n       last(day_ntl_vlm, time)   AS \"24h notional vol\"\nFROM assetctx\nWHERE $__timeFilter(time) AND coin IN (${coin:singlequote})\nGROUP BY coin\nORDER BY coin"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Mark price",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "axisLabel": "mark px" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('$__interval'::interval, time) AS \"time\",\n       coin AS metric,\n       avg(mark_px) AS mark_px\nFROM assetctx\nWHERE $__timeFilter(time) AND coin IN (${coin:singlequote})\nGROUP BY 1, coin\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Open interest",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "axisLabel": "open interest" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('$__interval'::interval, time) AS \"time\",\n       coin AS metric,\n       last(open_interest, time) AS open_interest\nFROM assetctx\nWHERE $__timeFilter(time) AND coin IN (${coin:singlequote})\nGROUP BY 1, coin\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Premium (mark vs oracle)",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "axisLabel": "premium" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('$__interval'::interval, time) AS \"time\",\n       coin AS metric,\n       avg(premium) AS premium\nFROM assetctx\nWHERE $__timeFilter(time) AND coin IN (${coin:singlequote})\nGROUP BY 1, coin\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Funding rate (8h)",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 5,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "axisLabel": "funding" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('$__interval'::interval, time) AS \"time\",\n       coin AS metric,\n       avg(funding) AS funding\nFROM assetctx\nWHERE $__timeFilter(time) AND coin IN (${coin:singlequote})\nGROUP BY 1, coin\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Cumulative volume delta (signed taker flow)",
+      "description": "Running sum of taker-buy minus taker-sell size. Rising = net aggressive buying.",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "axisLabel": "cvd" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT bucket AS \"time\",\n       coin AS metric,\n       sum(net) OVER (PARTITION BY coin ORDER BY bucket) AS cvd\nFROM (\n  SELECT time_bucket('$__interval'::interval, time) AS bucket, coin,\n         sum(CASE WHEN side = 'B' THEN sz ELSE -sz END) AS net\n  FROM trades\n  WHERE $__timeFilter(time) AND coin IN (${coin:singlequote})\n  GROUP BY 1, coin\n) s\nORDER BY bucket"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "OI-contraction liquidation proxy (signed)",
+      "description": "Magnitude of open-interest reduction in each bucket, signed by price direction: positive = short flush (OI down while price up), negative = long flush (OI down while price down).",
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 70, "showPoints": "never", "axisLabel": "liq pressure" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "hl_timescaledb" },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "WITH b AS (\n  SELECT time_bucket('$__interval'::interval, time) AS bucket, coin,\n         last(open_interest, time) AS oi,\n         last(mark_px, time) AS mark\n  FROM assetctx\n  WHERE $__timeFilter(time) AND coin IN (${coin:singlequote})\n  GROUP BY 1, coin\n), d AS (\n  SELECT bucket, coin,\n         oi   - lag(oi)   OVER (PARTITION BY coin ORDER BY bucket) AS d_oi,\n         mark - lag(mark) OVER (PARTITION BY coin ORDER BY bucket) AS d_mark\n  FROM b\n)\nSELECT bucket AS \"time\",\n       coin AS metric,\n       CASE WHEN d_mark < 0 THEN -greatest(-d_oi, 0) ELSE greatest(-d_oi, 0) END AS liq_pressure\nFROM d\nWHERE d_oi IS NOT NULL\nORDER BY bucket"
+        }
+      ]
+    }
+  ]
+}
