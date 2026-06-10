@@ -66,9 +66,9 @@ datasource. Override ports/credentials by copying `.env.example` → `.env`.
 
 The collector also samples the **L2 order book** (`l2Book`, top 20 levels per
 side, one snapshot per coin every `book_secs`) into `book_levels` — everyone's
-resting limit orders aggregated by price. (Note: stop-loss / take-profit trigger
-orders are *not* public on Hyperliquid and cannot be collected — see the table
-above.)
+resting limit orders aggregated by price. Stop-loss / take-profit triggers are
+also public (per address) and collected via `make triggers` — see the table
+above and `scripts/poll_triggers.py`.
 
 ### Getting data into the dashboard
 
@@ -81,6 +81,22 @@ make load      # upsert collected parquet into TimescaleDB (idempotent)
 hypertable schema and upserts with `ON CONFLICT DO NOTHING`, so re-running it is
 safe — only new rows are inserted. Run it on a loop, or after each collection
 session, to keep Grafana fed.
+
+#### Live mode (hands-off)
+
+To skip the manual `collect` → `load` cycle, stream straight into TimescaleDB —
+Grafana auto-refreshes, so the market dashboards update on their own:
+
+```bash
+make live            # collector writes trades/book/assetctx directly to the DB
+make triggers-loop   # re-sweep stop/TP orders every 15 min (background)
+make retention       # rolling buffer: drop old chunks (trades/book 7d, rest 30d)
+```
+
+The WS market data is truly live (sub-minute). Stop/TP orders have no firehose,
+so `triggers-loop` refreshes them periodically (a full sweep is rate-limited).
+`make retention` keeps the DB from growing forever — adjust the windows in
+`db/init/04_retention.sql`.
 
 ### Dashboards
 
