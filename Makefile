@@ -7,7 +7,7 @@ export
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help env up down restart logs ps psql load collect fetch spike fmt check hooks precommit
+.PHONY: help env up down restart logs ps psql load meta collect fetch spike fmt check hooks precommit
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -38,6 +38,9 @@ psql: ## Open a psql shell on TimescaleDB
 
 load: ## Load collected data/live parquet into TimescaleDB
 	uv run scripts/load_db.py
+
+meta: ## Refresh per-coin perp metadata (max leverage) into coin_meta
+	uv run scripts/load_meta.py
 
 collect: ## Run the live WS collector (writes data/live/*.parquet)
 	uv run scripts/collect_live.py
