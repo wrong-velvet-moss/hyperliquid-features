@@ -2,11 +2,17 @@
 
 Hyperliquid is an on-chain CLOB, so other traders' trigger orders are public —
 queryable per address via ``frontendOpenOrders``. There is no global firehose,
-so we enumerate addresses (from the trades we already collect) and poll each,
-keeping the ``isTrigger`` rows. Each run is a snapshot stamped with one time.
+so we enumerate addresses and poll each, keeping the ``isTrigger`` rows. Each run
+is a snapshot stamped with one time.
 
-    make up && make collect && make load   # accumulate the address universe
-    make triggers                          # sweep -> trigger_orders
+Address sources (``--source``):
+  - ``leaderboard`` (default): the public leaderboard (~38k traders), biggest
+    account values first — the most positions, so the most stops/TPs.
+  - ``trades``: distinct addresses seen in our collected trade tape.
+  - ``both``: leaderboard then trades, de-duplicated.
+
+    make triggers                              # leaderboard sweep -> trigger_orders
+    uv run scripts/poll_triggers.py --max-addrs 2000 --source both
 """
 
 from __future__ import annotations
@@ -15,9 +21,29 @@ import argparse
 
 import pandas as pd
 import psycopg
+import requests
 
 from hlsignals import store
 from hlsignals.api import HyperliquidInfo
+
+LEADERBOARD_URL = "https://stats-data.hyperliquid.xyz/Mainnet/leaderboard"
+
+
+def _leaderboard_addresses(limit: int, timeout: float = 60.0) -> list[str]:
+    """Top trader addresses from the public leaderboard, by account value desc."""
+    resp = requests.get(LEADERBOARD_URL, timeout=timeout)
+    resp.raise_for_status()
+    rows = resp.json().get("leaderboardRows", [])
+
+    def _account_value(row: dict) -> float:
+        value = row.get("accountValue")
+        try:
+            return float(value) if value is not None else 0.0
+        except ValueError:
+            return 0.0
+
+    rows.sort(key=_account_value, reverse=True)
+    return [row["ethAddress"] for row in rows[:limit] if row.get("ethAddress")]
 
 
 def _recent_addresses(
@@ -36,6 +62,16 @@ def _recent_addresses(
             (since_hours, since_hours, limit),
         )
         return [r[0] for r in cur.fetchall()]
+
+
+def _dedupe(addrs: list[str], limit: int) -> list[str]:
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for a in addrs:
+        if a not in seen:
+            seen.add(a)
+            uniq.append(a)
+    return uniq[:limit]
 
 
 def _trigger_rows(addr: str, orders: list[dict], snapshot: pd.Timestamp) -> list[dict]:
@@ -61,53 +97,70 @@ def _trigger_rows(addr: str, orders: list[dict], snapshot: pd.Timestamp) -> list
     return rows
 
 
+def _gather_addresses(source: str, max_addrs: int, since_hours: float) -> list[str]:
+    addrs: list[str] = []
+    if source in ("leaderboard", "both"):
+        lb = _leaderboard_addresses(max_addrs)
+        print(f"  {len(lb)} addresses from leaderboard", flush=True)
+        addrs.extend(lb)
+    if source in ("trades", "both"):
+        with store.connect() as conn:
+            tr = _recent_addresses(conn, max_addrs, since_hours)
+        print(f"  {len(tr)} addresses from trades", flush=True)
+        addrs.extend(tr)
+    return _dedupe(addrs, max_addrs)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--max-addrs", type=int, default=400, help="max addresses to poll this sweep"
+        "--max-addrs", type=int, default=1000, help="max addresses to poll this sweep"
+    )
+    parser.add_argument(
+        "--source",
+        choices=["leaderboard", "trades", "both"],
+        default="leaderboard",
+        help="where to source addresses (default: leaderboard)",
     )
     parser.add_argument(
         "--since-hours",
         type=float,
         default=72.0,
-        help="only addresses seen trading within this many hours",
+        help="for --source trades/both: only addresses seen trading within N hours",
     )
     args = parser.parse_args()
 
     api = HyperliquidInfo()
     snapshot = pd.Timestamp.now(tz="UTC")
 
+    print(f"gathering addresses ({args.source})...", flush=True)
+    addrs = _gather_addresses(args.source, args.max_addrs, args.since_hours)
+    if not addrs:
+        print("no addresses found; try --source leaderboard, or collect trades first")
+        return
+    print(f"polling {len(addrs)} addresses for trigger orders...", flush=True)
+
+    rows: list[dict] = []
+    n_with = 0
+    for i, addr in enumerate(addrs, 1):
+        try:
+            orders = api.frontend_open_orders(addr)
+        except RuntimeError as exc:
+            print(f"  [{addr[:10]}…] skipped: {exc}", flush=True)
+            continue
+        trig = _trigger_rows(addr, orders, snapshot)
+        if trig:
+            n_with += 1
+            rows.extend(trig)
+        if i % 100 == 0:
+            print(f"  {i}/{len(addrs)} polled, {len(rows)} triggers so far", flush=True)
+
     with store.connect() as conn:
-        addrs = _recent_addresses(conn, args.max_addrs, args.since_hours)
-        if not addrs:
-            print(
-                "no recent addresses in trades; run `make collect && make load` first"
-            )
-            return
-        print(f"polling {len(addrs)} addresses for trigger orders...", flush=True)
-
-        rows: list[dict] = []
-        n_with = 0
-        for i, addr in enumerate(addrs, 1):
-            try:
-                orders = api.frontend_open_orders(addr)
-            except RuntimeError as exc:
-                print(f"  [{addr[:10]}…] skipped: {exc}", flush=True)
-                continue
-            trig = _trigger_rows(addr, orders, snapshot)
-            if trig:
-                n_with += 1
-                rows.extend(trig)
-            if i % 50 == 0:
-                print(
-                    f"  {i}/{len(addrs)} polled, {len(rows)} triggers so far",
-                    flush=True,
-                )
-
         n = store.upsert_triggers(conn, pd.DataFrame(rows)) if rows else 0
 
     print(
-        f"sweep {snapshot.isoformat()}: {n} trigger orders from {n_with}/{len(addrs)} addresses"
+        f"sweep {snapshot.isoformat()}: {n} trigger orders "
+        f"from {n_with}/{len(addrs)} addresses"
     )
 
 
