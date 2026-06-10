@@ -1,0 +1,17 @@
+# data + outputs (regenerate with the scripts / collector)
+data/
+reports/*.md
+reports/*.png
+
+# local env / secrets
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
