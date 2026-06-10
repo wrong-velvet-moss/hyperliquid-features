@@ -7,7 +7,7 @@ export
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help env up down restart logs ps psql load collect fetch spike fmt check
+.PHONY: help env up down restart logs ps psql load collect fetch spike fmt check hooks precommit
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -53,3 +53,9 @@ fmt: ## Format Python with ruff
 
 check: ## Lint Python with ruff
 	uv run ruff check .
+
+hooks: ## Install the pre-commit git hook (run once per clone)
+	uv run pre-commit install
+
+precommit: ## Run all pre-commit hooks against the whole repo
+	uv run pre-commit run --all-files

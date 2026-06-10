@@ -99,6 +99,20 @@ uv run scripts/fetch_fairvalue.py --n 20 --days 120   # ~1 min, free public API
 uv run scripts/spike_fairvalue.py                     # prints IC table + writes report
 ```
 
+## Development
+
+Commit guardrails run via [pre-commit](https://pre-commit.com) so each commit
+lands small and clean — a large-file guard (>1 MB), private-key detection, and
+`ruff` lint + format. Enable once per clone:
+
+```bash
+make hooks                 # uv run pre-commit install
+make precommit             # run all hooks across the repo on demand
+```
+
+After that, `git commit` auto-formats staged Python and rejects oversized or
+secret-bearing files before they ever enter history.
+
 ## Reading the result
 
 `spike_fairvalue.py` reports the **information coefficient** (Spearman rank
