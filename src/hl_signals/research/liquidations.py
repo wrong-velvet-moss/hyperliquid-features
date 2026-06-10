@@ -4,8 +4,8 @@ EMPIRICAL FINDING (verified live): the public `trades` feed has NO liquidation
 flag (fields are only coin/side/px/sz/time/hash/tid/users), so liquidations
 cannot be labeled from public data. Two real paths:
 
-  FREE  -> live OI-proxy collector (implemented): see hlsignals/collector.py +
-           hlsignals/livepanel.py. activeAssetCtx streams `openInterest`; a sharp
+  FREE  -> live OI-proxy collector (implemented): see hl_signals/ingest/collector.py
+           + hl_signals/research/livepanel.py. activeAssetCtx streams `openInterest`; a sharp
            OI contraction during a price move proxies a liquidation cascade.
   TRUE  -> S3 node archive (labeled, full history) -- blocked behind requester-pays
            + IAM perms; documented below.

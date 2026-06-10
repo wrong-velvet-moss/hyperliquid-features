@@ -214,7 +214,7 @@ class LiveCollector:
 
     def _flush_db(self, trades: list[dict], ctx: list[dict], book: list[dict]) -> None:
         """Upsert the buffered records straight into TimescaleDB (live mode)."""
-        from hlsignals import store  # local import: parquet-only mode needs no DB layer
+        from .. import store  # local import: parquet-only mode needs no DB layer
 
         ctx_rename = {
             "ts": "time",
