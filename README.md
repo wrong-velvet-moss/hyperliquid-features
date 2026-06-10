@@ -92,8 +92,14 @@ multi-select `coin` filter and, per coin over time:
 - **OI-contraction liquidation proxy** — signed: positive = short flush
   (OI down while price up), negative = long flush
 
-Edits to the JSON are picked up live (the provider watches the folder), so you
-can tweak panels in the Grafana UI and copy the model back into the repo.
+A second dashboard, **Hyperliquid — Order Book Depth**
+(`grafana/dashboards/order_book_depth.json`), visualises the public L2 book for a
+selected coin: a **resting-depth heatmap** (size by bps from mid over time), bid
+vs ask depth, top-of-book spread, and a **largest-walls** table. This is the real
+"everyone's orders" view — resting limit orders, not the private stop/TP triggers.
+
+Edits to any dashboard JSON are picked up live (the provider watches the folder),
+so you can tweak panels in the Grafana UI and copy the model back into the repo.
 
 ## Quickstart
 
