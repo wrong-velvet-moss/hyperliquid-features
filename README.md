@@ -61,6 +61,18 @@ On first start the DB schema (`db/init/`) creates `assetctx` and `trades`
 hypertables, and Grafana auto-provisions the TimescaleDB datasource. Override
 ports/credentials by copying `.env.example` → `.env`.
 
+### Getting data into the dashboard
+
+```bash
+make collect   # run the live WS collector for a while -> data/live/*.parquet
+make load      # upsert collected parquet into TimescaleDB (idempotent)
+```
+
+`make load` (`scripts/load_db.py`) maps the collector's part-files onto the
+hypertable schema and upserts with `ON CONFLICT DO NOTHING`, so re-running it is
+safe — only new rows are inserted. Run it on a loop, or after each collection
+session, to keep Grafana fed.
+
 ## Quickstart
 
 This is a [uv](https://docs.astral.sh/uv/) project — `uv` reads `pyproject.toml`,

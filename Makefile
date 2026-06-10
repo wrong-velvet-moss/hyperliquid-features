@@ -7,7 +7,7 @@ export
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help env up down restart logs ps psql collect fetch spike fmt check
+.PHONY: help env up down restart logs ps psql load collect fetch spike fmt check
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -35,6 +35,9 @@ ps: ## Show stack status
 
 psql: ## Open a psql shell on TimescaleDB
 	docker compose exec timescaledb psql -U $${POSTGRES_USER:-hl} -d $${POSTGRES_DB:-hlsignals}
+
+load: ## Load collected data/live parquet into TimescaleDB
+	uv run scripts/load_db.py
 
 collect: ## Run the live WS collector (writes data/live/*.parquet)
 	uv run scripts/collect_live.py
