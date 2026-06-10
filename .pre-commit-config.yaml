@@ -1,0 +1,24 @@
+# Local commit guardrails. Enable once per clone:
+#     uv run pre-commit install
+# Run against everything on demand:
+#     uv run pre-commit run --all-files
+#
+# Keeps commits small + clean: blocks large/binary files and leaked keys, and
+# auto-formats/lints Python so each commit lands tidy.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: detect-private-key
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.16
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
