@@ -2,25 +2,22 @@
 """Pull hourly funding/premium + OHLCV for the top-N perps -> data/fairvalue_panel.parquet.
 
 Usage:
-    python scripts/fetch_fairvalue.py --n 20 --days 120
+    uv run hl-fetch-fairvalue --n 20 --days 120
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
 import time
 from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from ..api import HyperliquidInfo
+from ..ingest.fairvalue import build_panel, fetch_candles, fetch_funding
+from ..ingest.universe import perp_contexts
 
-from hlsignals.api import HyperliquidInfo
-from hlsignals.fairvalue import build_panel, fetch_candles, fetch_funding
-from hlsignals.universe import perp_contexts
-
-DATA = Path(__file__).resolve().parents[1] / "data"
+DATA = Path("data")
 
 
 def main() -> None:

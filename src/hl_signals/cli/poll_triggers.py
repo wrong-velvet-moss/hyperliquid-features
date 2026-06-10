@@ -12,7 +12,7 @@ Address sources (``--source``):
   - ``both``: leaderboard then trades, de-duplicated.
 
     make triggers                              # leaderboard sweep -> trigger_orders
-    uv run scripts/poll_triggers.py --max-addrs 2000 --source both
+    uv run hl-poll-triggers --max-addrs 2000 --source both
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ import pandas as pd
 import psycopg
 import requests
 
-from hlsignals import store
-from hlsignals.api import HyperliquidInfo
+from .. import store
+from ..api import HyperliquidInfo
 
 LEADERBOARD_URL = "https://stats-data.hyperliquid.xyz/Mainnet/leaderboard"
 

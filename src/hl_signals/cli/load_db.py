@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from hlsignals import store
-from hlsignals.livepanel import load_live
+from .. import store
+from ..research.livepanel import load_live
 
 # Collector parquet column -> assetctx hypertable column.
 ASSETCTX_RENAME = {

@@ -8,8 +8,8 @@ per coin. Run occasionally (leverage tiers change rarely):
 
 from __future__ import annotations
 
-from hlsignals import store
-from hlsignals.api import HyperliquidInfo
+from .. import store
+from ..api import HyperliquidInfo
 
 _UPSERT = (
     "INSERT INTO coin_meta (coin, max_leverage, sz_decimals) VALUES (%s, %s, %s) "

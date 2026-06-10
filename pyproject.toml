@@ -15,6 +15,15 @@ dependencies = [
     "websockets>=16.0",
 ]
 
+[project.scripts]
+hl-fetch-fairvalue = "hl_signals.cli.fetch_fairvalue:main"
+hl-collect = "hl_signals.cli.collect:main"
+hl-load-db = "hl_signals.cli.load_db:main"
+hl-load-meta = "hl_signals.cli.load_meta:main"
+hl-poll-triggers = "hl_signals.cli.poll_triggers:main"
+hl-spike-fairvalue = "hl_signals.cli.spike_fairvalue:main"
+hl-spike-liquidations = "hl_signals.cli.spike_liquidations:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

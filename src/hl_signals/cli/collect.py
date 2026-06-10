@@ -2,23 +2,20 @@
 """Run the live collector (free liquidation-proxy path).
 
 Examples:
-    python scripts/collect_live.py --n 20            # run until killed (Ctrl-C)
-    python scripts/collect_live.py --n 10 --minutes 90 --flush 30
+    uv run hl-collect --n 20            # run until killed (Ctrl-C)
+    uv run hl-collect --n 10 --minutes 90 --flush 30
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from ..ingest.collector import LiveCollector
+from ..ingest.universe import top_perps_by_volume
 
-from hlsignals.collector import LiveCollector
-from hlsignals.universe import top_perps_by_volume
-
-OUTDIR = Path(__file__).resolve().parents[1] / "data" / "live"
+OUTDIR = Path("data/live")
 
 
 def main() -> None:
