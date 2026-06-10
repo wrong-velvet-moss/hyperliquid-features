@@ -74,6 +74,22 @@ class HyperliquidInfo:
             payload["endTime"] = int(end_ms)
         return self._post(payload)
 
+    def frontend_open_orders(self, user: str) -> list[dict]:
+        """All of ``user``'s resting orders, including trigger (stop/TP) orders.
+
+        Public per-address endpoint. Each order carries ``isTrigger``,
+        ``triggerPx``, ``orderType`` (e.g. "Stop Market", "Take Profit Limit"),
+        ``reduceOnly`` and ``isPositionTpsl`` — i.e. other traders' stop-loss and
+        take-profit levels are visible here.
+
+        Args:
+            user: The 0x address to query.
+
+        Returns:
+            A list of open-order dicts (empty if the address has none).
+        """
+        return self._post({"type": "frontendOpenOrders", "user": user})
+
     def candle_snapshot(
         self, coin: str, interval: str, start_ms: int, end_ms: int
     ) -> list[dict]:

@@ -48,6 +48,19 @@ BOOK_COLUMNS: tuple[str, ...] = (
     "sz",
     "n",
 )
+TRIGGER_COLUMNS: tuple[str, ...] = (
+    "time",
+    "addr",
+    "coin",
+    "oid",
+    "side",
+    "order_type",
+    "trigger_px",
+    "limit_px",
+    "sz",
+    "reduce_only",
+    "is_position_tpsl",
+)
 
 
 def _env(*names: str, default: str) -> str:
@@ -159,3 +172,8 @@ def upsert_trades(conn: psycopg.Connection, df: pd.DataFrame) -> int:
 def upsert_book(conn: psycopg.Connection, df: pd.DataFrame) -> int:
     """Load L2 order-book levels into the ``book_levels`` hypertable."""
     return _upsert(conn, "book_levels", BOOK_COLUMNS, df)
+
+
+def upsert_triggers(conn: psycopg.Connection, df: pd.DataFrame) -> int:
+    """Load resting trigger (stop/TP) orders into the ``trigger_orders`` hypertable."""
+    return _upsert(conn, "trigger_orders", TRIGGER_COLUMNS, df)
