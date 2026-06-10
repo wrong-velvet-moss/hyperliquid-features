@@ -39,6 +39,15 @@ TRADES_COLUMNS: tuple[str, ...] = (
     "buyer",
     "seller",
 )
+BOOK_COLUMNS: tuple[str, ...] = (
+    "time",
+    "coin",
+    "side",
+    "lvl",
+    "px",
+    "sz",
+    "n",
+)
 
 
 def _env(*names: str, default: str) -> str:
@@ -145,3 +154,8 @@ def upsert_assetctx(conn: psycopg.Connection, df: pd.DataFrame) -> int:
 def upsert_trades(conn: psycopg.Connection, df: pd.DataFrame) -> int:
     """Load trades into the ``trades`` hypertable."""
     return _upsert(conn, "trades", TRADES_COLUMNS, df)
+
+
+def upsert_book(conn: psycopg.Connection, df: pd.DataFrame) -> int:
+    """Load L2 order-book levels into the ``book_levels`` hypertable."""
+    return _upsert(conn, "book_levels", BOOK_COLUMNS, df)

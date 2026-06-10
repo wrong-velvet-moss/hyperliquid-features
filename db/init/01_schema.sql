@@ -42,3 +42,22 @@ SELECT create_hypertable('trades', 'time', if_not_exists => TRUE);
 
 CREATE UNIQUE INDEX IF NOT EXISTS trades_time_tid_uniq ON trades (time, tid);
 CREATE INDEX IF NOT EXISTS trades_coin_time_idx ON trades (coin, time DESC);
+
+-- ---------------------------------------------------------------------------
+-- L2 order-book snapshots (WS `l2Book`). One row per price level per snapshot;
+-- side is 'bid' / 'ask', lvl is the level index (0 = best). These are everyone's
+-- resting limit orders, aggregated by price (n = number of orders at that price).
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS book_levels (
+    time    TIMESTAMPTZ        NOT NULL,
+    coin    TEXT               NOT NULL,
+    side    TEXT               NOT NULL,
+    lvl     SMALLINT           NOT NULL,
+    px      DOUBLE PRECISION,
+    sz      DOUBLE PRECISION,
+    n       INTEGER
+);
+SELECT create_hypertable('book_levels', 'time', if_not_exists => TRUE);
+
+CREATE UNIQUE INDEX IF NOT EXISTS book_levels_uniq ON book_levels (time, coin, side, lvl);
+CREATE INDEX IF NOT EXISTS book_levels_coin_time_idx ON book_levels (coin, time DESC);

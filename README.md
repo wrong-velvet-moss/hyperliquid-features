@@ -57,9 +57,15 @@ make down      # stop (volumes persist)
 - **Grafana** → http://localhost:3000 (default `admin` / `admin`, change in `.env`)
 - **TimescaleDB** → `localhost:5432`, db `hlsignals` (open a shell with `make psql`)
 
-On first start the DB schema (`db/init/`) creates `assetctx` and `trades`
-hypertables, and Grafana auto-provisions the TimescaleDB datasource. Override
-ports/credentials by copying `.env.example` → `.env`.
+On first start the DB schema (`db/init/`) creates the `assetctx`, `trades`, and
+`book_levels` hypertables, and Grafana auto-provisions the TimescaleDB
+datasource. Override ports/credentials by copying `.env.example` → `.env`.
+
+The collector also samples the **L2 order book** (`l2Book`, top 20 levels per
+side, one snapshot per coin every `book_secs`) into `book_levels` — everyone's
+resting limit orders aggregated by price. (Note: stop-loss / take-profit trigger
+orders are *not* public on Hyperliquid and cannot be collected — see the table
+above.)
 
 ### Getting data into the dashboard
 
