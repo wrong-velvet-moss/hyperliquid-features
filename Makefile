@@ -7,7 +7,7 @@ export
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help env up down restart logs ps psql load meta triggers collect fetch spike fmt check hooks precommit
+.PHONY: help env up down restart logs ps psql load meta triggers collect live fetch spike fmt check hooks precommit
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -47,6 +47,9 @@ triggers: ## Poll real stop/TP (trigger) orders into trigger_orders
 
 collect: ## Run the live WS collector (writes data/live/*.parquet)
 	uv run scripts/collect_live.py
+
+live: ## Stream market data straight into TimescaleDB (hands-off live; Ctrl-C to stop)
+	uv run scripts/collect_live.py --sink db
 
 fetch: ## Pull the fair-value panel from the public API
 	uv run scripts/fetch_fairvalue.py

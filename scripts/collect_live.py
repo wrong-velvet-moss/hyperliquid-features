@@ -30,14 +30,22 @@ def main() -> None:
         default=None,
         help="stop after N minutes (default: run forever)",
     )
+    ap.add_argument("--flush", type=int, default=60, help="flush every N seconds")
     ap.add_argument(
-        "--flush", type=int, default=60, help="flush part-files every N seconds"
+        "--sink",
+        choices=["parquet", "db", "both"],
+        default="parquet",
+        help="where to write: parquet files, TimescaleDB (live), or both",
     )
     args = ap.parse_args()
 
     coins = top_perps_by_volume(args.n)
-    print(f"Collecting {len(coins)} coins -> {OUTDIR}\n{coins}", flush=True)
-    collector = LiveCollector(coins, OUTDIR, flush_secs=args.flush)
+    dest = OUTDIR if args.sink != "db" else "TimescaleDB"
+    print(
+        f"Collecting {len(coins)} coins (sink={args.sink}) -> {dest}\n{coins}",
+        flush=True,
+    )
+    collector = LiveCollector(coins, OUTDIR, flush_secs=args.flush, sink=args.sink)
     try:
         asyncio.run(collector.run(minutes=args.minutes))
     except KeyboardInterrupt:
