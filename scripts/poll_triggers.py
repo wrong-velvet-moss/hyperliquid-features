@@ -18,6 +18,7 @@ Address sources (``--source``):
 from __future__ import annotations
 
 import argparse
+import time
 
 import pandas as pd
 import psycopg
@@ -111,30 +112,13 @@ def _gather_addresses(source: str, max_addrs: int, since_hours: float) -> list[s
     return _dedupe(addrs, max_addrs)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--max-addrs", type=int, default=1000, help="max addresses to poll this sweep"
-    )
-    parser.add_argument(
-        "--source",
-        choices=["leaderboard", "trades", "both"],
-        default="leaderboard",
-        help="where to source addresses (default: leaderboard)",
-    )
-    parser.add_argument(
-        "--since-hours",
-        type=float,
-        default=72.0,
-        help="for --source trades/both: only addresses seen trading within N hours",
-    )
-    args = parser.parse_args()
-
-    api = HyperliquidInfo()
+def _sweep(
+    api: HyperliquidInfo, source: str, max_addrs: int, since_hours: float
+) -> None:
+    """Run one full sweep: gather addresses, poll each, upsert the triggers."""
     snapshot = pd.Timestamp.now(tz="UTC")
-
-    print(f"gathering addresses ({args.source})...", flush=True)
-    addrs = _gather_addresses(args.source, args.max_addrs, args.since_hours)
+    print(f"gathering addresses ({source})...", flush=True)
+    addrs = _gather_addresses(source, max_addrs, since_hours)
     if not addrs:
         print("no addresses found; try --source leaderboard, or collect trades first")
         return
@@ -162,6 +146,40 @@ def main() -> None:
         f"sweep {snapshot.isoformat()}: {n} trigger orders "
         f"from {n_with}/{len(addrs)} addresses"
     )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--max-addrs", type=int, default=1000, help="max addresses to poll this sweep"
+    )
+    parser.add_argument(
+        "--source",
+        choices=["leaderboard", "trades", "both"],
+        default="leaderboard",
+        help="where to source addresses (default: leaderboard)",
+    )
+    parser.add_argument(
+        "--since-hours",
+        type=float,
+        default=72.0,
+        help="for --source trades/both: only addresses seen trading within N hours",
+    )
+    parser.add_argument(
+        "--loop",
+        type=float,
+        default=0.0,
+        help="repeat every N seconds (0 = one sweep then exit)",
+    )
+    args = parser.parse_args()
+
+    api = HyperliquidInfo()
+    while True:
+        _sweep(api, args.source, args.max_addrs, args.since_hours)
+        if args.loop <= 0:
+            break
+        print(f"next sweep in {args.loop:.0f}s...", flush=True)
+        time.sleep(args.loop)
 
 
 if __name__ == "__main__":
