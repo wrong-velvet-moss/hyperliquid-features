@@ -7,7 +7,7 @@ export
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help env up down restart logs ps psql load meta triggers triggers-loop retention collect live fetch spike spike-liq fmt check hooks precommit
+.PHONY: help env up down restart logs ps psql load meta triggers triggers-loop retention collect live fetch spike spike-liq spike-triggers fmt check hooks precommit
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -66,6 +66,9 @@ spike: ## Run the fair-value predictiveness test
 
 spike-liq: ## Run the OI-liquidation-proxy predictiveness test (needs collected data)
 	uv run hl-spike-liquidations
+
+spike-triggers: ## Run the trigger-cluster predictiveness test (needs assetctx + trigger_orders in DB)
+	uv run hl-spike-triggers
 
 fmt: ## Format Python with ruff
 	uv run ruff format .
