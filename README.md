@@ -140,12 +140,14 @@ src/hl_signals/
     labels.py       # forward returns, funding z-score
     predictive.py   # information coefficient, de-overlapped IC, quantile buckets
     livepanel.py    # assemble collected live parquet into a bar panel + OI liq proxy
+    triggers.py     # assemble real trigger orders + price into a stop/TP cluster panel
     liquidations.py # S3 node-archive liquidations (true-label path; NotImplemented stub)
   cli/              # console entry points (one main() each)
     fetch_fairvalue.py    # hl-fetch-fairvalue    pull data -> data/fairvalue_panel.parquet
     spike_fairvalue.py    # hl-spike-fairvalue    predictiveness test -> reports/fairvalue_spike.md
     collect.py            # hl-collect            run the live collector (parquet / db / both)
     spike_liquidations.py # hl-spike-liquidations IC harness on the OI-based liquidation proxy
+    spike_triggers.py     # hl-spike-triggers    IC harness on real stop/TP cluster features
     load_db.py            # hl-load-db            upsert collected live parquet into TimescaleDB
     load_meta.py          # hl-load-meta          per-coin max leverage -> coin_meta (modeled heatmap)
     poll_triggers.py      # hl-poll-triggers      sweep real stop/TP orders per address -> trigger_orders
@@ -234,6 +236,27 @@ The Modeled Liquidation Heatmap is the what-if projection other sites present as
 "liq heatmap" for the full user base, labelled as such. Edits to any dashboard JSON
 are picked up live, so you can tweak panels in the UI and copy the model back.
 
+### Trigger-cluster signal (roadmap #2)
+
+Do dense stop/take-profit clusters predict the next move? This leg reads the real
+per-address trigger orders and the live price spine from TimescaleDB, so it needs
+the stack up with data flowing (unlike the parquet-only fair-value path):
+
+```bash
+make up && make live     # stream assetctx into the DB (the price spine)
+make triggers            # sweep real stop/TP orders into trigger_orders
+# let both accumulate (hours/days for a real result), then:
+uv run hl-spike-triggers --freq 15min   # IC harness -> reports/triggers_spike.md
+```
+
+For each bar, `hl-spike-triggers` (`src/hl_signals/research/triggers.py`) attaches
+the most recent trigger sweep and sums proximity-weighted stop/TP notional into
+buckets keyed on stop-vs-TP and above-vs-below price, then runs the **same** IC
+harness as the other spikes. The mechanics it tests: **stop clusters cascade →
+continuation** (a positive IC on the stop signals), while **take-profits fade →
+mean reversion**. Below ~500 usable bars it prints a smoke-test warning rather than
+a result — keep collecting.
+
 ## Reading the predictiveness results
 
 `hl-spike-fairvalue` reports the **information coefficient** (Spearman rank
@@ -266,8 +289,10 @@ secret-bearing files before they enter history.
    `hourly_liquidations_from_s3` (parse `node_fills_by_block`), then run the *same*
    IC harness — does a liquidation spike precede reversal or continuation? This is
    the cleanest test of the uninformed-flow hypothesis.
-2. **Trigger clusters as a signal:** test whether dense stop/TP clusters from
-   `trigger_orders` predict the location and direction of the next move.
+2. ✅ **Trigger clusters as a signal:** done — `hl-spike-triggers`
+   (`src/hl_signals/research/triggers.py`) builds proximity-weighted stop/TP
+   cluster features from `trigger_orders` and runs them through the IC harness
+   to test whether they predict the location and direction of the next move.
 3. **Combine signals:** premium + liquidation pressure + trigger proximity in a
    single ranked, de-overlapped model.
 4. **Promote to higher frequency** only where a signal looks real and sub-hour data

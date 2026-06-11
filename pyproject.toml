@@ -23,6 +23,7 @@ hl-load-meta = "hl_signals.cli.load_meta:main"
 hl-poll-triggers = "hl_signals.cli.poll_triggers:main"
 hl-spike-fairvalue = "hl_signals.cli.spike_fairvalue:main"
 hl-spike-liquidations = "hl_signals.cli.spike_liquidations:main"
+hl-spike-triggers = "hl_signals.cli.spike_triggers:main"
 
 [build-system]
 requires = ["hatchling"]
